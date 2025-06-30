@@ -1,0 +1,4 @@
+#This is needed to invoke the custom route loader in the OiUserBundle.
+file_routes:
+  resource: ../../vendor/oi/file/src/Controller/
+  type: attribute

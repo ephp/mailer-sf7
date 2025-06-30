@@ -1,0 +1,110 @@
+{
+  "type": "project",
+  "license": "proprietary",
+  "minimum-stability": "stable",
+  "prefer-stable": true,
+  "require": {
+    "php": ">=8.2",
+    "ext-ctype": "*",
+    "ext-iconv": "*",
+    "beberlei/doctrineextensions": "*",
+    "doctrine/annotations": "*",
+    "doctrine/dbal": "*",
+    "doctrine/doctrine-bundle": "*",
+    "doctrine/doctrine-fixtures-bundle": "^4.1",
+    "doctrine/doctrine-migrations-bundle": "*",
+    "doctrine/orm": "*",
+    "gedmo/doctrine-extensions": "*",
+    "gesdinet/jwt-refresh-token-bundle": "dev-master",
+    "jsor/doctrine-postgis": "^7.0",
+    "oi/file": "7.0.*",
+    "oi/geo": "7.0.*",
+    "oi/helper": "7.0.*",
+    "oi/postgres": "7.0.*",
+    "oi/user-api": "7.0.*",
+    "oi/utility": "7.0.*",
+    "symfony/console": "7.3.*",
+    "symfony/css-selector": "7.3.*",
+    "symfony/dom-crawler": "7.3.*",
+    "symfony/dotenv": "7.3.*",
+    "symfony/flex": "^2",
+    "symfony/form": "7.3.*",
+    "symfony/framework-bundle": "7.3.*",
+    "symfony/http-client": "7.3.*",
+    "symfony/runtime": "7.3.*",
+    "symfony/serializer": "7.3.*",
+    "symfony/string": "7.3.*",
+    "symfony/twig-bundle": "7.3.*",
+    "symfony/yaml": "7.3.*"
+  },
+  "config": {
+    "allow-plugins": {
+      "php-http/discovery": true,
+      "symfony/flex": true,
+      "symfony/runtime": true
+    },
+    "bump-after-update": true,
+    "sort-packages": true
+  },
+  "autoload": {
+    "psr-4": {
+      "App\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "App\\Tests\\": "tests/"
+    }
+  },
+  "replace": {
+    "symfony/polyfill-ctype": "*",
+    "symfony/polyfill-iconv": "*",
+    "symfony/polyfill-php72": "*",
+    "symfony/polyfill-php73": "*",
+    "symfony/polyfill-php74": "*",
+    "symfony/polyfill-php80": "*",
+    "symfony/polyfill-php81": "*",
+    "symfony/polyfill-php82": "*"
+  },
+  "scripts": {
+    "auto-scripts": {
+      "cache:clear": "symfony-cmd",
+      "assets:install %PUBLIC_DIR%": "symfony-cmd"
+    },
+    "post-install-cmd": [
+      "@auto-scripts"
+    ],
+    "post-update-cmd": [
+      "@auto-scripts"
+    ]
+  },
+  "conflict": {
+    "symfony/symfony": "*"
+  },
+  "extra": {
+    "symfony": {
+      "allow-contrib": true,
+      "require": "7.3.*"
+    }
+  },
+  "repositories": [
+    {
+      "type": "composer",
+      "url": "https://satis.oimmei.com"
+    },
+    {
+      "type": "git",
+      "url": "https://github.com/Oimmei-Digital-Boutique-Bundle/doctrine-postgis"
+    },
+    {
+      "type": "git",
+      "url": "https://github.com/Oimmei-Digital-Boutique-Bundle/JWTRefreshTokenBundle"
+    }
+  ],
+  "require-dev": {
+    "nelmio/cors-bundle": "^2.5",
+    "symfony/maker-bundle": "^1.60",
+    "symfony/stopwatch": "7.3.*",
+    "symfony/web-profiler-bundle": "7.3.*"
+  }
+}

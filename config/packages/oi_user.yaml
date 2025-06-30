@@ -1,0 +1,13 @@
+oi_user:
+  user_class: App\Entity\User
+  login: false
+  profile: false
+  request_password: false
+  redirect_after_login: true
+  registration: false
+  first_login: true
+  first_login_token_expires_after_hours: 720 # 30 days.
+  backend: false
+  email:
+    from_email: '%mailer_sender%'
+    from_name: '%mailer_from%'

@@ -1,0 +1,4 @@
+# This is needed to invoke the custom route loader in the OiUserBundle.
+auth_routes:
+  resource: .
+  type: auth_routes

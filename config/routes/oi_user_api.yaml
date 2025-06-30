@@ -1,0 +1,7 @@
+#This is needed to invoke the custom route loader in the OiUserApiBundle.
+auth_api_routes:
+  resource: .
+  type: auth_api_routes
+  options:
+    api_versions:
+      - !php/const Oi\ApiBundle\Helper\ApiVersion::V1

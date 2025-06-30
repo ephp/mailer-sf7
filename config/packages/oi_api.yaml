@@ -1,0 +1,5 @@
+oi_api:
+    enable_exception_listener: true
+    enable_jsonbody_to_request_subscriber: true
+    url_versioning:
+        enable: true

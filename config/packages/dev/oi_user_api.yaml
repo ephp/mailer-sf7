@@ -1,0 +1,4 @@
+oi_user_api:
+    # Setting the cookies without a samesite policy, so they can work locally with CORS.
+    cookie:
+        samesite: none

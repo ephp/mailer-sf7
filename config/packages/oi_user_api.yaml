@@ -1,0 +1,11 @@
+oi_user_api:
+    user_class: App\Entity\User
+    user_backend_form_type: App\Form\UserType
+    registration: false
+    confirm_registration: false
+    first_login: true
+    confirm_change_email: false
+    immediately_delete_profile: true
+    backend: true
+    cookie:
+        enable: true
