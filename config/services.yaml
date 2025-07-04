@@ -7,7 +7,7 @@ parameters:
     app_protocol: '%env(APP_PROTOCOL)%'
     app_hostname: '%env(APP_HOSTNAME)%'
     app_url: '%app_protocol%://%app_hostname%'
-    mailer_from: ''
+    mailer_from: 'dev'
     mailer_sender: dev@oimmei.com
 
 services:
