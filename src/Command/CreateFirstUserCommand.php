@@ -13,10 +13,11 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\Console\Question\Question;
 
 #[AsCommand(
     name: 'app:create:user',
-    description: 'Add a short description for your command',
+    description: 'Create a new user with interactive wizard or default Oimmei values',
 )]
 class CreateFirstUserCommand extends Command
 {
@@ -32,10 +33,11 @@ class CreateFirstUserCommand extends Command
     protected function configure(): void
     {
         $this
-            ->addArgument('firstname', InputArgument::OPTIONAL, 'First Name', 'Oimmei')
-            ->addArgument('lastname', InputArgument::OPTIONAL, 'Last Name', 'D.C.')
-            ->addArgument('email', InputArgument::OPTIONAL, 'Email', 'info@oimmei.com')
-            ->addArgument('password', InputArgument::OPTIONAL, 'Password', 'Oimmei^_')
+            ->addOption('oimmei', null, InputOption::VALUE_NONE, 'Use default Oimmei values')
+            ->addArgument('firstname', InputArgument::OPTIONAL, 'First Name')
+            ->addArgument('lastname', InputArgument::OPTIONAL, 'Last Name')
+            ->addArgument('email', InputArgument::OPTIONAL, 'Email')
+            ->addArgument('password', InputArgument::OPTIONAL, 'Password')
         ;
     }
 
@@ -43,10 +45,34 @@ class CreateFirstUserCommand extends Command
     {
         $io = new SymfonyStyle($input, $output);
 
-        $firstname = $input->getArgument('firstname');
-        $lastname = $input->getArgument('lastname');
-        $email = $input->getArgument('email');
-        $password = $input->getArgument('password');
+        // Se è presente l'opzione --oimmei, usa i valori di default
+        if ($input->getOption('oimmei')) {
+            $firstname = 'Oimmei';
+            $lastname = 'D.C.';
+            $email = 'info@oimmei.com';
+            $password = 'Oimmei^_';
+            $role = 'ROLE_OIMMEI';
+        } else {
+            // Altrimenti usa il wizard per raccogliere i dati
+            $firstname = $this->getValueOrAsk($input, $io, 'firstname', 'First Name');
+            $lastname = $this->getValueOrAsk($input, $io, 'lastname', 'Last Name');
+            $email = $this->getValueOrAsk($input, $io, 'email', 'Email');
+            $password = $this->getPasswordOrAsk($input, $io);
+            $role = 'ROLE_ADMIN';
+        }
+
+        // Validazione base dell'email
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $io->error('Invalid email format');
+            return Command::FAILURE;
+        }
+
+        // Controlla se l'utente esiste già
+        $existingUser = $this->em->getRepository(User::class)->findOneBy(['email' => $email]);
+        if ($existingUser) {
+            $io->error('A user with this email already exists');
+            return Command::FAILURE;
+        }
 
         $user = new User();
 
@@ -54,6 +80,7 @@ class CreateFirstUserCommand extends Command
         $user->setLastName($lastname);
         $user->setEmail($email);
         $user->setDisabled(false);
+        $user->addRole($role);
         $user->setPassword($this->passwordHasher->hashPassword($user, $password));
 
         $this->em->persist($user);
@@ -62,5 +89,48 @@ class CreateFirstUserCommand extends Command
         $io->success("The user was successfully created. You can login with: " . $email . " / " . $password);
 
         return Command::SUCCESS;
+    }
+
+    private function getValueOrAsk(InputInterface $input, SymfonyStyle $io, string $argumentName, string $label): string
+    {
+        $value = $input->getArgument($argumentName);
+
+        if (empty($value)) {
+            $question = new Question("Enter {$label}: ");
+            $question->setValidator(function ($answer) use ($label) {
+                if (empty(trim($answer))) {
+                    throw new \RuntimeException("{$label} cannot be empty");
+                }
+                return trim($answer);
+            });
+
+            $value = $io->askQuestion($question);
+        }
+
+        return $value;
+    }
+
+    private function getPasswordOrAsk(InputInterface $input, SymfonyStyle $io): string
+    {
+        $password = $input->getArgument('password');
+
+        if (empty($password)) {
+            $question = new Question('Enter Password: ');
+            $question->setHidden(true);
+            $question->setHiddenFallback(false);
+            $question->setValidator(function ($answer) {
+                if (empty(trim($answer))) {
+                    throw new \RuntimeException("Password cannot be empty");
+                }
+                if (strlen(trim($answer)) < 6) {
+                    throw new \RuntimeException("Password must be at least 6 characters long");
+                }
+                return trim($answer);
+            });
+
+            $password = $io->askQuestion($question);
+        }
+
+        return $password;
     }
 }

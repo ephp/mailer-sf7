@@ -2922,16 +2922,16 @@
         },
         {
             "name": "oi/api",
-            "version": "7.0.2.5",
+            "version": "7.0.2.6",
             "source": {
                 "type": "git",
                 "url": "git@github.com:Oimmei-Digital-Boutique-Bundle/apibundle.git",
-                "reference": "4784c7b17258392e697011edaf856d087b22fa2f"
+                "reference": "da54f03c97106e6bcc6d3542c8022af5a9c62ecb"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Oimmei-Digital-Boutique-Bundle/apibundle/zipball/4784c7b17258392e697011edaf856d087b22fa2f",
-                "reference": "4784c7b17258392e697011edaf856d087b22fa2f",
+                "url": "https://api.github.com/repos/Oimmei-Digital-Boutique-Bundle/apibundle/zipball/da54f03c97106e6bcc6d3542c8022af5a9c62ecb",
+                "reference": "da54f03c97106e6bcc6d3542c8022af5a9c62ecb",
                 "shasum": ""
             },
             "require": {
@@ -2964,10 +2964,10 @@
                 "API, App"
             ],
             "support": {
-                "source": "https://github.com/Oimmei-Digital-Boutique-Bundle/apibundle/tree/7.0.2.5",
+                "source": "https://github.com/Oimmei-Digital-Boutique-Bundle/apibundle/tree/7.0.2.6",
                 "issues": "https://github.com/Oimmei-Digital-Boutique-Bundle/apibundle/issues"
             },
-            "time": "2025-07-04T09:50:59+00:00"
+            "time": "2025-07-04T15:08:06+00:00"
         },
         {
             "name": "oi/file",
@@ -9355,16 +9355,16 @@
         },
         {
             "name": "symfony/maker-bundle",
-            "version": "v1.63.0",
+            "version": "v1.64.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/maker-bundle.git",
-                "reference": "69478ab39bc303abfbe3293006a78b09a8512425"
+                "reference": "c86da84640b0586e92aee2b276ee3638ef2f425a"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/maker-bundle/zipball/69478ab39bc303abfbe3293006a78b09a8512425",
-                "reference": "69478ab39bc303abfbe3293006a78b09a8512425",
+                "url": "https://api.github.com/repos/symfony/maker-bundle/zipball/c86da84640b0586e92aee2b276ee3638ef2f425a",
+                "reference": "c86da84640b0586e92aee2b276ee3638ef2f425a",
                 "shasum": ""
             },
             "require": {
@@ -9392,6 +9392,7 @@
                 "symfony/http-client": "^6.4|^7.0",
                 "symfony/phpunit-bridge": "^6.4.1|^7.0",
                 "symfony/security-core": "^6.4|^7.0",
+                "symfony/security-http": "^6.4|^7.0",
                 "symfony/yaml": "^6.4|^7.0",
                 "twig/twig": "^3.0|^4.x-dev"
             },
@@ -9427,7 +9428,7 @@
             ],
             "support": {
                 "issues": "https://github.com/symfony/maker-bundle/issues",
-                "source": "https://github.com/symfony/maker-bundle/tree/v1.63.0"
+                "source": "https://github.com/symfony/maker-bundle/tree/v1.64.0"
             },
             "funding": [
                 {
@@ -9443,7 +9444,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2025-04-26T01:41:37+00:00"
+            "time": "2025-06-23T16:12:08+00:00"
         },
         {
             "name": "symfony/web-profiler-bundle",
