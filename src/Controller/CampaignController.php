@@ -102,6 +102,7 @@ class CampaignController extends AbstractController
         if ($form->isSubmitted() && $form->isValid()) {
             $em = $doctrine->getManager();
             $this->syncMailLists($campaign, $request->request->all()['mail_list_ids'] ?? [], $account, $em);
+            $this->syncStructure($campaign, $request->request->all()['structure'] ?? null);
 
             $em->persist($campaign);
             $em->flush();
@@ -142,6 +143,7 @@ class CampaignController extends AbstractController
         if ($form->isSubmitted() && $form->isValid()) {
             $em = $doctrine->getManager();
             $this->syncMailLists($campaign, $request->request->all()['mail_list_ids'] ?? [], $account, $em);
+            $this->syncStructure($campaign, $request->request->all()['structure'] ?? null);
             $em->flush();
 
             $detail = new ItemDetail($campaign, $translator->trans('campaign.success.updated'));
@@ -154,6 +156,71 @@ class CampaignController extends AbstractController
             ItemDetail::MESSAGE_ERROR,
         );
         return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
+    }
+
+    #[Route('/campaigns/{id}/test-email', name: 'campaign_test_email', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function testEmail(
+        int $id,
+        Request $request,
+        ManagerRegistry $doctrine,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        $campaign = $this->findCampaignForUser($id, $doctrine, $translator, $serializer);
+        if ($campaign instanceof Response) {
+            return $campaign;
+        }
+
+        $email = $request->request->get('email') ?? '';
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.invalid_email'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        // Actual sending will be wired up in F06 (Sistema Invio Asincrono)
+        $detail = new ItemDetail(null, $translator->trans('campaign.success.test_sent'));
+        return new Response($serializer->serialize($detail, 'json'));
+    }
+
+    #[Route('/campaigns/{id}/send', name: 'campaign_send', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function send(
+        int $id,
+        Request $request,
+        ManagerRegistry $doctrine,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        $campaign = $this->findCampaignForUser($id, $doctrine, $translator, $serializer);
+        if ($campaign instanceof Response) {
+            return $campaign;
+        }
+
+        $scheduledAtRaw = $request->request->get('scheduled_at');
+        if ($scheduledAtRaw !== null && $scheduledAtRaw !== '') {
+            try {
+                $scheduledAt = new \DateTimeImmutable($scheduledAtRaw);
+                $campaign->setScheduledAt($scheduledAt);
+            } catch (\Exception) {
+                $detail = new ItemDetail(null, $translator->trans('campaign.error.invalid_date'), ItemDetail::MESSAGE_ERROR);
+                return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+        } else {
+            $campaign->setScheduledAt(null);
+        }
+
+        $campaign->setDraft(false);
+
+        $em = $doctrine->getManager();
+        $em->flush();
+
+        $message = $campaign->getScheduledAt() !== null
+            ? $translator->trans('campaign.success.scheduled')
+            : $translator->trans('campaign.success.sent');
+
+        $detail = new ItemDetail($campaign, $message);
+        return new Response($serializer->serialize($detail, 'json'));
     }
 
     #[Route('/campaigns/{id}/delete', name: 'campaign_delete', methods: ['POST'])]
@@ -211,6 +278,13 @@ class CampaignController extends AbstractController
             if ($mailList !== null && $mailList->getAccountId() === $account?->getId()) {
                 $collection->add($mailList);
             }
+        }
+    }
+
+    private function syncStructure(Campaign $campaign, mixed $structure): void
+    {
+        if (is_array($structure)) {
+            $campaign->setStructure($structure);
         }
     }
 }

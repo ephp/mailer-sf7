@@ -19,7 +19,11 @@ class CampaignType extends AbstractType
             ->add('emailSubject', TextType::class)
             ->add('snippet', TextType::class, ['required' => false])
             ->add('body', TextareaType::class, ['required' => false])
-            ->add('draft', CheckboxType::class, ['required' => false]);
+            ->add('draft', CheckboxType::class, ['required' => false])
+            ->add('scheduledAt', \Symfony\Component\Form\Extension\Core\Type\DateTimeType::class, [
+                'required' => false,
+                'widget' => 'single_text',
+            ]);
     }
 
     public function configureOptions(OptionsResolver $resolver): void
