@@ -1,0 +1,227 @@
+<?php
+
+namespace App\Controller\Admin;
+
+use App\Entity\Account;
+use App\Form\AccountType;
+use App\Repository\AccountRepository;
+use Doctrine\Persistence\ManagerRegistry;
+use Knp\Component\Pager\PaginatorInterface;
+use Oi\ApiBundle\Model\ItemDetail;
+use Oi\ApiBundle\Model\PaginatedList;
+use Oi\ApiBundle\Service\Form\Interfaces\FormErrorMessageHandlerInterface;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
+use Symfony\Component\Serializer\SerializerInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
+
+#[Route('/api/v1')]
+class AccountController extends AbstractController
+{
+    public function __construct(
+        private readonly FormErrorMessageHandlerInterface $formErrorMessageHandler,
+    ) {}
+
+    #[Route('/account/my-account', name: 'account_my_account', methods: ['GET'])]
+    #[IsGranted('ROLE_USER')]
+    public function myAccount(
+        SerializerInterface  $serializer,
+        TranslatorInterface  $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        return new Response($serializer->serialize(new ItemDetail($account), 'json'));
+    }
+
+    #[Route('/account/my-account/edit', name: 'account_my_account_edit', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function editMyAccount(
+        Request              $request,
+        ManagerRegistry      $doctrine,
+        SerializerInterface  $serializer,
+        TranslatorInterface  $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $form = $this->createForm(AccountType::class, $account);
+        $form->submit($request->request->all()[$form->getName()] ?? []);
+
+        if ($form->isSubmitted() && $form->isValid()) {
+            $doctrine->getManager()->flush();
+            $detail = new ItemDetail($account, $translator->trans('account.success.updated'));
+            return new Response($serializer->serialize($detail, 'json'));
+        }
+
+        $detail = new ItemDetail(
+            $account,
+            $this->formErrorMessageHandler->getErrorMessageFromForm($form),
+            ItemDetail::MESSAGE_ERROR,
+        );
+        return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
+    }
+
+    #[Route('/backend/account', name: 'admin_account_index', methods: ['GET'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function index(
+        Request              $request,
+        AccountRepository    $accountRepository,
+        PaginatorInterface   $paginator,
+        SerializerInterface  $serializer,
+    ): Response {
+        $qb = $accountRepository->createQueryBuilder('a')
+            ->orderBy('a.ragioneSociale', 'ASC');
+
+        $pagination = $paginator->paginate(
+            $qb,
+            $request->query->getInt('page', 1),
+            $request->query->getInt('per_page', 20),
+        );
+
+        $list = new PaginatedList($pagination);
+
+        return new Response($serializer->serialize($list, 'json'));
+    }
+
+    #[Route('/backend/account/{id}', name: 'admin_account_find', methods: ['GET'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function find(
+        int                  $id,
+        ManagerRegistry      $doctrine,
+        SerializerInterface  $serializer,
+        TranslatorInterface  $translator,
+    ): Response {
+        $account = $doctrine->getManager()->find(Account::class, $id);
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        return new Response($serializer->serialize(new ItemDetail($account), 'json'));
+    }
+
+    #[Route('/backend/account-new', name: 'admin_account_new', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function new(
+        Request              $request,
+        ManagerRegistry      $doctrine,
+        SerializerInterface  $serializer,
+        TranslatorInterface  $translator,
+    ): Response {
+        $account = new Account();
+        $form = $this->createForm(AccountType::class, $account);
+        $form->submit($request->request->all()[$form->getName()] ?? []);
+
+        if ($form->isSubmitted() && $form->isValid()) {
+            $em = $doctrine->getManager();
+            $em->persist($account);
+            $em->flush();
+
+            $detail = new ItemDetail($account, $translator->trans('account.success.created'));
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_CREATED);
+        }
+
+        $detail = new ItemDetail(
+            null,
+            $this->formErrorMessageHandler->getErrorMessageFromForm($form),
+            ItemDetail::MESSAGE_ERROR,
+        );
+        return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
+    }
+
+    #[Route('/backend/account/{id}/edit', name: 'admin_account_edit', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function edit(
+        int                  $id,
+        Request              $request,
+        ManagerRegistry      $doctrine,
+        SerializerInterface  $serializer,
+        TranslatorInterface  $translator,
+    ): Response {
+        $em = $doctrine->getManager();
+        $account = $em->find(Account::class, $id);
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $form = $this->createForm(AccountType::class, $account);
+        $form->submit($request->request->all()[$form->getName()] ?? []);
+
+        if ($form->isSubmitted() && $form->isValid()) {
+            $em->flush();
+
+            $detail = new ItemDetail($account, $translator->trans('account.success.updated'));
+            return new Response($serializer->serialize($detail, 'json'));
+        }
+
+        $detail = new ItemDetail(
+            $account,
+            $this->formErrorMessageHandler->getErrorMessageFromForm($form),
+            ItemDetail::MESSAGE_ERROR,
+        );
+        return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
+    }
+
+    #[Route('/backend/account/{id}/enable', name: 'admin_account_enable', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function enable(
+        int                  $id,
+        ManagerRegistry      $doctrine,
+        SerializerInterface  $serializer,
+        TranslatorInterface  $translator,
+    ): Response {
+        $em = $doctrine->getManager();
+        $account = $em->find(Account::class, $id);
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $account->setEnabled(true);
+        $em->flush();
+
+        return new Response($serializer->serialize(new ItemDetail($account, $translator->trans('account.success.enabled')), 'json'));
+    }
+
+    #[Route('/backend/account/{id}/disable', name: 'admin_account_disable', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
+    public function disable(
+        int                  $id,
+        ManagerRegistry      $doctrine,
+        SerializerInterface  $serializer,
+        TranslatorInterface  $translator,
+    ): Response {
+        $em = $doctrine->getManager();
+        $account = $em->find(Account::class, $id);
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $account->setEnabled(false);
+        $em->flush();
+
+        return new Response($serializer->serialize(new ItemDetail($account, $translator->trans('account.success.disabled')), 'json'));
+    }
+}
