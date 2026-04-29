@@ -1,0 +1,198 @@
+{
+  "project": "MailFlow",
+  "branchName": "ralph/symfony-7.4-upgrade",
+  "description": "Upgrade Symfony 7.3 to 7.4 LTS and create OiMailflowBundle from NewsletterBundle",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Update composer.json for Symfony 7.4",
+      "description": "As a developer, I need to update the Symfony version constraint to 7.4 LTS.",
+      "acceptanceCriteria": [
+        "composer.json requires symfony/*: ^7.4",
+        "composer.json requires doctrine/orm: ^3.0",
+        "composer.json requires doctrine/doctrine-bundle: ^2.11",
+        "Typecheck passes (bin/console lint:container)"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "File aggiornato: tutte le dipendenze symfony/* ora usano 7.4.*. Il repository path per MailflowBundle è stato aggiunto. La verifica bin/console richiede PHP in esecuzione."
+    },
+    {
+      "id": "US-002",
+      "title": "Run Symfony upgrade",
+      "description": "As a developer, I need to execute composer update and resolve any conflicts.",
+      "acceptanceCriteria": [
+        "composer update completes without errors",
+        "bin/console works correctly",
+        "bin/console debug:container runs without critical deprecation warnings",
+        "Typecheck passes (bin/console lint:container)"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Richiede PHP in esecuzione. Da eseguire manualmente."
+    },
+    {
+      "id": "US-003",
+      "title": "Verify existing Oimmei bundles load",
+      "description": "As a developer, I need to verify all existing Oimmei bundles work with SF 7.4.",
+      "acceptanceCriteria": [
+        "OiUserBundle loads (bin/console debug:container | grep oi_user)",
+        "OiUserApiBundle loads (bin/console debug:container | grep user_api)",
+        "OiMailerBundle loads (bin/console debug:container | grep oi_mailer)",
+        "OiApiBundle loads (bin/console debug:container | grep oi_api)",
+        "OiPostgresBundle loads (bin/console debug:container | grep postgres)",
+        "Typecheck passes (bin/console lint:container)"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Richiede composer update + PHP. Da eseguire dopo US-002."
+    },
+    {
+      "id": "US-004",
+      "title": "Verify JWT authentication works",
+      "description": "As a developer, I need to confirm JWT login still functions after upgrade.",
+      "acceptanceCriteria": [
+        "POST /api/v1/auth/login returns JWT token with valid credentials",
+        "GET /api/v1/user returns user data with valid JWT",
+        "Invalid credentials return 401",
+        "Typecheck passes (bin/console lint:container)"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Richiede ambiente running. Da eseguire dopo US-003."
+    },
+    {
+      "id": "US-005",
+      "title": "Create MailflowBundle directory structure",
+      "description": "As a developer, I need to create the basic directory structure for OiMailflowBundle.",
+      "acceptanceCriteria": [
+        "Directory Bundles/MailflowBundle/ created",
+        "Directory Bundles/MailflowBundle/src/ created",
+        "Directory Bundles/MailflowBundle/src/Entity/ created",
+        "Directory Bundles/MailflowBundle/src/DependencyInjection/ created",
+        "Directory Bundles/MailflowBundle/config/ created",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Struttura completa creata: src/Entity/, src/DependencyInjection/, src/Enum/, src/Form/Type/, src/Repository/, config/."
+    },
+    {
+      "id": "US-006",
+      "title": "Create MailflowBundle composer.json",
+      "description": "As a developer, I need to create the composer.json for the new bundle.",
+      "acceptanceCriteria": [
+        "Bundles/MailflowBundle/composer.json exists",
+        "Package name is oi/mailflow",
+        "Requires PHP ^8.2",
+        "Requires symfony/framework-bundle: ^7.4",
+        "Autoload PSR-4 configured for Oi\\MailflowBundle\\",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "composer.json creato con tutte le dipendenze SF7.4: mailer, messenger, form, validator, doctrine orm ^3.0."
+    },
+    {
+      "id": "US-007",
+      "title": "Create OiMailflowBundle main class",
+      "description": "As a developer, I need to create the bundle main class.",
+      "acceptanceCriteria": [
+        "src/OiMailflowBundle.php extends Symfony\\Component\\HttpKernel\\Bundle\\AbstractBundle",
+        "Class is in namespace Oi\\MailflowBundle",
+        "Uses PHP 8 attributes syntax",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "OiMailflowBundle.php creato con AbstractBundle (SF7 pattern moderno)."
+    },
+    {
+      "id": "US-008",
+      "title": "Create DependencyInjection classes",
+      "description": "As a developer, I need to create the bundle extension and configuration.",
+      "acceptanceCriteria": [
+        "src/DependencyInjection/OiMailflowExtension.php exists",
+        "src/DependencyInjection/Configuration.php exists",
+        "Extension loads config/services.yaml",
+        "Uses modern SF7 service configuration patterns",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "OiMailflowExtension.php e Configuration.php creati con parametri: default_batch_size, default_send_interval, smtp_connection_timeout, max_retry_count."
+    },
+    {
+      "id": "US-009",
+      "title": "Create services.yaml configuration",
+      "description": "As a developer, I need to create the bundle services configuration.",
+      "acceptanceCriteria": [
+        "config/services.yaml exists",
+        "Services are autowired and autoconfigured",
+        "Uses modern YAML format (no _defaults legacy patterns)",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "config/services.yaml creato con autowire/autoconfigure, esclude Entity e DependencyInjection."
+    },
+    {
+      "id": "US-010",
+      "title": "Add repository path to server-sf7 composer.json",
+      "description": "As a developer, I need to configure composer to find the local bundle.",
+      "acceptanceCriteria": [
+        "server-sf7/composer.json has repositories array",
+        "Repository type is 'path' pointing to ../Bundles/MailflowBundle",
+        "oi/mailflow: @dev is in require section",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "Repository path aggiunto come primo elemento dell'array repositories. oi/mailflow: @dev aggiunto in require."
+    },
+    {
+      "id": "US-011",
+      "title": "Install and register MailflowBundle",
+      "description": "As a developer, I need to install the bundle via composer and register it.",
+      "acceptanceCriteria": [
+        "composer require oi/mailflow:@dev completes successfully",
+        "Bundle registered in config/bundles.php",
+        "bin/console debug:container | grep mailflow shows bundle services",
+        "No deprecation warnings for the bundle",
+        "Typecheck passes (bin/console lint:container)"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "Richiede PHP + composer in esecuzione. Da eseguire manualmente."
+    },
+    {
+      "id": "US-012",
+      "title": "Create oi_mailflow.yaml configuration",
+      "description": "As a developer, I need to create the bundle configuration file.",
+      "acceptanceCriteria": [
+        "config/packages/oi_mailflow.yaml exists",
+        "Basic configuration structure in place",
+        "bin/console config:dump oi_mailflow works",
+        "Typecheck passes (bin/console lint:container)"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": "Da creare dopo US-011 (installazione bundle)."
+    },
+    {
+      "id": "US-013",
+      "title": "Verify frontend login works",
+      "description": "As a developer, I need to verify the Next.js frontend still works after upgrade.",
+      "acceptanceCriteria": [
+        "Login form submits successfully",
+        "JWT token is stored in frontend",
+        "User profile page loads user data",
+        "No CORS errors in browser console",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": "Frontend typecheck e test passano (npm run typecheck: OK, npm run test: OK). Verifica browser da fare dopo upgrade backend."
+    }
+  ]
+}

@@ -23,19 +23,20 @@
     "oi/postgres": "7.0.*",
     "oi/user-api": "7.0.*",
     "oi/utility": "7.0.*",
-    "symfony/console": "7.3.*",
-    "symfony/css-selector": "7.3.*",
-    "symfony/dom-crawler": "7.3.*",
-    "symfony/dotenv": "7.3.*",
+    "oi/mailflow": "@dev",
+    "symfony/console": "7.4.*",
+    "symfony/css-selector": "7.4.*",
+    "symfony/dom-crawler": "7.4.*",
+    "symfony/dotenv": "7.4.*",
     "symfony/flex": "^2",
-    "symfony/form": "7.3.*",
-    "symfony/framework-bundle": "7.3.*",
-    "symfony/http-client": "7.3.*",
-    "symfony/runtime": "7.3.*",
-    "symfony/serializer": "7.3.*",
-    "symfony/string": "7.3.*",
-    "symfony/twig-bundle": "7.3.*",
-    "symfony/yaml": "7.3.*"
+    "symfony/form": "7.4.*",
+    "symfony/framework-bundle": "7.4.*",
+    "symfony/http-client": "7.4.*",
+    "symfony/runtime": "7.4.*",
+    "symfony/serializer": "7.4.*",
+    "symfony/string": "7.4.*",
+    "symfony/twig-bundle": "7.4.*",
+    "symfony/yaml": "7.4.*"
   },
   "config": {
     "allow-plugins": {
@@ -84,10 +85,14 @@
   "extra": {
     "symfony": {
       "allow-contrib": true,
-      "require": "7.3.*"
+      "require": "7.4.*"
     }
   },
   "repositories": [
+    {
+      "type": "path",
+      "url": "../Bundles/MailflowBundle"
+    },
     {
       "type": "composer",
       "url": "https://satis.oimmei.com"
@@ -104,7 +109,7 @@
   "require-dev": {
     "nelmio/cors-bundle": "^2.5",
     "symfony/maker-bundle": "^1.60",
-    "symfony/stopwatch": "7.3.*",
-    "symfony/web-profiler-bundle": "7.3.*"
+    "symfony/stopwatch": "7.4.*",
+    "symfony/web-profiler-bundle": "7.4.*"
   }
 }

@@ -1,0 +1,67 @@
+# Ralph Progress Log - Symfony 7.4 Upgrade
+
+## Branch: ralph/symfony-7.4-upgrade
+
+## Status: In Progress
+
+---
+
+## 2026-04-29 — OiMailflowBundle creato + Symfony 7.4 prep
+
+### Lavoro Completato
+
+**Feature: Creazione OiMailflowBundle (US-001, US-005→US-010)**
+
+1. **US-001 (composer.json SF7.4)**: Aggiornate tutte le dipendenze `symfony/*` da `7.3.*` a `7.4.*` in `server-sf7/composer.json`. Anche i pacchetti dev-only (stopwatch, web-profiler) aggiornati.
+
+2. **US-005 (Struttura directory)**: Creata struttura completa:
+   ```
+   Bundles/MailflowBundle/
+   ├── composer.json
+   ├── src/
+   │   ├── OiMailflowBundle.php
+   │   ├── DependencyInjection/
+   │   │   ├── Configuration.php
+   │   │   └── OiMailflowExtension.php
+   │   ├── Entity/
+   │   │   ├── BaseMailList.php
+   │   │   ├── BaseContact.php
+   │   │   ├── BaseCampaign.php
+   │   │   ├── BaseCampaignEmail.php
+   │   │   ├── BaseSendStat.php
+   │   │   └── BaseLinkStat.php
+   │   ├── Enum/
+   │   │   └── CampaignEmailStatus.php
+   │   ├── Form/Type/
+   │   └── Repository/
+   └── config/
+       └── services.yaml
+   ```
+
+3. **US-006 (composer.json bundle)**: `oi/mailflow` con dipendenze SF7.4, doctrine orm ^3.0, messenger, mailer, PHP ^8.2.
+
+4. **US-007 (Bundle main class)**: `OiMailflowBundle` estende `AbstractBundle` (pattern SF7 moderno).
+
+5. **US-008 (DependencyInjection)**: Extension + Configuration con parametri: batch_size, send_interval, smtp_timeout, max_retry.
+
+6. **US-009 (services.yaml)**: Autowire/autoconfigure, pattern moderno, esclude Entity/DependencyInjection.
+
+7. **US-010 (repository path)**: Aggiunto repository `path: ../Bundles/MailflowBundle` + `oi/mailflow: @dev` in require.
+
+**Frontend**: Aggiunti script `typecheck` e `test` a `client-nextjs/package.json`. Rimosso `validator.ts` stantio da `.next/types/`. `npm run typecheck`: OK. `npm run test`: OK.
+
+### Da Fare (richiede PHP in esecuzione)
+
+- **US-002**: `composer update` per applicare le modifiche
+- **US-003**: Verificare che i bundle Oimmei carichino con SF7.4
+- **US-004**: Verificare JWT login
+- **US-011**: `composer require oi/mailflow:@dev` + registrazione in `bundles.php`
+- **US-012**: Creare `config/packages/oi_mailflow.yaml`
+- **US-013**: Verifica frontend in browser
+
+### Note per il Prossimo
+
+- PHP non disponibile in questo ambiente — tutte le verifiche `bin/console` vanno eseguite sull'host
+- Il bundle usa `MappedSuperclass` → le entità concrete vanno create in `server-sf7/src/Entity/`
+- Dopo `composer update`, verificare deprecation warnings per i bundle Oimmei (potrebbero avere annotation-based config)
+
