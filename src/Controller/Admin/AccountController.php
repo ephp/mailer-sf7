@@ -5,6 +5,7 @@ namespace App\Controller\Admin;
 use App\Entity\Account;
 use App\Form\AccountType;
 use App\Repository\AccountRepository;
+use App\Service\SmtpDiagnosticService;
 use Doctrine\Persistence\ManagerRegistry;
 use Knp\Component\Pager\PaginatorInterface;
 use Oi\ApiBundle\Model\ItemDetail;
@@ -75,6 +76,50 @@ class AccountController extends AbstractController
             ItemDetail::MESSAGE_ERROR,
         );
         return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
+    }
+
+    #[Route('/account/my-account/diagnose', name: 'account_my_account_diagnose', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function diagnose(
+        SmtpDiagnosticService $diagnosticService,
+        SerializerInterface   $serializer,
+        TranslatorInterface   $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $result = $diagnosticService->diagnose($account);
+        $detail = new ItemDetail($result);
+        return new Response($serializer->serialize($detail, 'json'));
+    }
+
+    #[Route('/account/my-account/regenerate-key', name: 'account_my_account_regenerate_key', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function regenerateApiKey(
+        ManagerRegistry     $doctrine,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $account->regenerateApiKey();
+        $doctrine->getManager()->flush();
+
+        $detail = new ItemDetail($account, $translator->trans('account.success.api_key_regenerated'));
+        return new Response($serializer->serialize($detail, 'json'));
     }
 
     #[Route('/backend/account', name: 'admin_account_index', methods: ['GET'])]
