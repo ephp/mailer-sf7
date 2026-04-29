@@ -1,0 +1,31 @@
+<?php
+
+namespace App\Repository;
+
+use App\Entity\Campaign;
+use App\Entity\CampaignEmail;
+use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Persistence\ManagerRegistry;
+use Oi\MailflowBundle\Enum\CampaignEmailStatus;
+
+/**
+ * @extends ServiceEntityRepository<CampaignEmail>
+ */
+class CampaignEmailRepository extends ServiceEntityRepository
+{
+    public function __construct(ManagerRegistry $registry)
+    {
+        parent::__construct($registry, CampaignEmail::class);
+    }
+
+    /** @return CampaignEmail[] */
+    public function findByCampaignAndStatus(Campaign $campaign, CampaignEmailStatus $status): array
+    {
+        return $this->findBy(['campaign' => $campaign, 'status' => $status]);
+    }
+
+    public function countByCampaign(Campaign $campaign): int
+    {
+        return $this->count(['campaign' => $campaign]);
+    }
+}

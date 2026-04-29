@@ -21,4 +21,10 @@ class ContactRepository extends ServiceEntityRepository
     {
         return $this->findOneBy(['email' => $email, 'mailList' => $mailList]);
     }
+
+    /** @return Contact[] */
+    public function findSubscribedByMailList(MailList $mailList): array
+    {
+        return $this->findBy(['mailList' => $mailList, 'iscritto' => true]);
+    }
 }

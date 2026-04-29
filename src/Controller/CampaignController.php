@@ -3,9 +3,13 @@
 namespace App\Controller;
 
 use App\Entity\Campaign;
+use App\Entity\CampaignEmail;
 use App\Entity\MailList;
 use App\Form\CampaignType;
+use App\Message\SendCampaignEmailMessage;
 use App\Repository\CampaignRepository;
+use App\Repository\ContactRepository;
+use App\Service\AccountMailerFactory;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use Knp\Component\Pager\PaginatorInterface;
@@ -13,8 +17,14 @@ use Oi\ApiBundle\Model\ItemDetail;
 use Oi\ApiBundle\Model\PaginatedList;
 use Oi\ApiBundle\Service\Form\Interfaces\FormErrorMessageHandlerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
+use Symfony\Component\Messenger\MessageBusInterface;
+use Symfony\Component\Messenger\Stamp\DelayStamp;
+use Symfony\Component\Mime\Address;
+use Symfony\Component\Mime\Email;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\Serializer\SerializerInterface;
@@ -25,6 +35,13 @@ class CampaignController extends AbstractController
 {
     public function __construct(
         private readonly FormErrorMessageHandlerInterface $formErrorMessageHandler,
+        private readonly AccountMailerFactory $mailerFactory,
+        private readonly MessageBusInterface $bus,
+        private readonly ContactRepository $contactRepository,
+        #[Autowire('%oi_mailflow.default_batch_size%')]
+        private readonly int $batchSize,
+        #[Autowire('%oi_mailflow.default_send_interval%')]
+        private readonly int $sendInterval,
     ) {}
 
     #[Route('/campaigns', name: 'campaign_index', methods: ['GET'])]
@@ -172,13 +189,32 @@ class CampaignController extends AbstractController
             return $campaign;
         }
 
-        $email = $request->request->get('email') ?? '';
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $recipientEmail = $request->request->get('email') ?? '';
+        if (!filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
             $detail = new ItemDetail(null, $translator->trans('campaign.error.invalid_email'), ItemDetail::MESSAGE_ERROR);
             return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        // Actual sending will be wired up in F06 (Sistema Invio Asincrono)
+        $account = $campaign->getAccount();
+        $dsn = $account->getSmtpDsn();
+
+        try {
+            $mailer = $this->mailerFactory->createMailer($dsn);
+            $fromAddress = $account->getSmtpUser() ?? 'noreply@example.com';
+            $fromName = $account->getRagioneSociale() ?? $fromAddress;
+
+            $email = (new Email())
+                ->from(new Address($fromAddress, $fromName))
+                ->to($recipientEmail)
+                ->subject('[TEST] ' . $campaign->getEmailSubject())
+                ->html($campaign->getBody() ?? '');
+
+            $mailer->send($email);
+        } catch (TransportExceptionInterface $e) {
+            $detail = new ItemDetail(null, $e->getMessage(), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+
         $detail = new ItemDetail(null, $translator->trans('campaign.success.test_sent'));
         return new Response($serializer->serialize($detail, 'json'));
     }
@@ -215,6 +251,8 @@ class CampaignController extends AbstractController
         $em = $doctrine->getManager();
         $em->flush();
 
+        $this->dispatchCampaignEmails($campaign, $em);
+
         $message = $campaign->getScheduledAt() !== null
             ? $translator->trans('campaign.success.scheduled')
             : $translator->trans('campaign.success.sent');
@@ -242,6 +280,71 @@ class CampaignController extends AbstractController
 
         $detail = new ItemDetail(null, $translator->trans('campaign.success.deleted'));
         return new Response($serializer->serialize($detail, 'json'));
+    }
+
+    private function dispatchCampaignEmails(Campaign $campaign, EntityManagerInterface $em): void
+    {
+        // Collect subscribed contacts, deduplicated by email address
+        $seen = [];
+        $entries = [];
+
+        foreach ($campaign->getMailLists() as $mailList) {
+            $contacts = $this->contactRepository->findSubscribedByMailList($mailList);
+            foreach ($contacts as $contact) {
+                $email = $contact->getEmail();
+                if ($email !== null && !isset($seen[$email])) {
+                    $seen[$email] = true;
+                    $entries[] = ['contact' => $contact, 'list' => $mailList];
+                }
+            }
+        }
+
+        $schedulingDelayMs = 0;
+        if ($campaign->getScheduledAt() !== null) {
+            $schedulingDelayMs = max(0, $campaign->getScheduledAt()->getTimestamp() - time()) * 1000;
+        }
+
+        // Rate limiting: spread emails across batches with sendInterval seconds between each batch
+        $sendIntervalMs = $this->sendInterval * 1000;
+
+        // Persist all CampaignEmail records in batches, collect objects for dispatch
+        $campaignEmails = [];
+        foreach ($entries as $i => $data) {
+            $campaignEmail = new CampaignEmail();
+            $campaignEmail->setCampaign($campaign);
+            $campaignEmail->setContact($data['contact']);
+            $campaignEmail->setMailList($data['list']);
+            $campaignEmail->setEmail($data['contact']->getEmail() ?? '');
+            $campaignEmail->setTrackingOpenId($this->generateUuid());
+            $em->persist($campaignEmail);
+            $campaignEmails[] = ['ce' => $campaignEmail, 'index' => $i];
+
+            if (($i + 1) % $this->batchSize === 0) {
+                $em->flush();
+            }
+        }
+        $em->flush();
+
+        // Dispatch messages — IDs are available after flush
+        foreach ($campaignEmails as $item) {
+            /** @var CampaignEmail $campaignEmail */
+            $campaignEmail = $item['ce'];
+            $i = $item['index'];
+
+            $batchDelayMs = (int) ($i / $this->batchSize) * $sendIntervalMs;
+            $totalDelayMs = $schedulingDelayMs + $batchDelayMs;
+
+            $stamps = $totalDelayMs > 0 ? [new DelayStamp($totalDelayMs)] : [];
+            $this->bus->dispatch(new SendCampaignEmailMessage($campaignEmail->getId()), $stamps);
+        }
+    }
+
+    private function generateUuid(): string
+    {
+        $data = random_bytes(16);
+        $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
+        $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
 
     private function findCampaignForUser(
