@@ -307,6 +307,100 @@ class CampaignController extends AbstractController
         return new Response($serializer->serialize($detail, 'json'));
     }
 
+    #[Route('/campaign-templates', name: 'campaign_template_index', methods: ['GET'])]
+    #[IsGranted('ROLE_USER')]
+    public function templates(
+        Request $request,
+        CampaignRepository $campaignRepository,
+        PaginatorInterface $paginator,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $qb = $campaignRepository->createQueryBuilder('c')
+            ->where('c.account = :account')
+            ->andWhere('c.template = true')
+            ->setParameter('account', $account)
+            ->orderBy('c.createdAt', 'DESC');
+
+        $pagination = $paginator->paginate(
+            $qb,
+            $request->query->getInt('page', 1),
+            $request->query->getInt('per_page', 50),
+        );
+
+        return new Response($serializer->serialize(new PaginatedList($pagination), 'json'));
+    }
+
+    #[Route('/campaigns/{id}/duplicate', name: 'campaign_duplicate', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function duplicate(
+        int $id,
+        ManagerRegistry $doctrine,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        $source = $this->findCampaignForUser($id, $doctrine, $translator, $serializer);
+        if ($source instanceof Response) {
+            return $source;
+        }
+
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        $copy = new Campaign();
+        $copy->setAccount($account);
+        $copy->setName($source->getName());
+        $copy->setEmailSubject($source->getEmailSubject());
+        $copy->setSnippet($source->getSnippet());
+        $copy->setBody($source->getBody());
+        $copy->setStructure($source->getStructure());
+        $copy->setComposition($source->getComposition());
+        $copy->setFilter($source->getFilter());
+        $copy->setDraft(true);
+        $copy->setTemplate(false);
+
+        $em = $doctrine->getManager();
+        foreach ($source->getMailLists() as $mailList) {
+            $copy->getMailLists()->add($mailList);
+        }
+
+        $em->persist($copy);
+        $em->flush();
+
+        $detail = new ItemDetail($copy, $translator->trans('campaign.success.duplicated'));
+        return new Response($serializer->serialize($detail, 'json'), Response::HTTP_CREATED);
+    }
+
+    #[Route('/campaigns/{id}/save-as-template', name: 'campaign_save_as_template', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function saveAsTemplate(
+        int $id,
+        ManagerRegistry $doctrine,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        $campaign = $this->findCampaignForUser($id, $doctrine, $translator, $serializer);
+        if ($campaign instanceof Response) {
+            return $campaign;
+        }
+
+        $campaign->setTemplate(true);
+        $doctrine->getManager()->flush();
+
+        $detail = new ItemDetail($campaign, $translator->trans('campaign.success.saved_as_template'));
+        return new Response($serializer->serialize($detail, 'json'));
+    }
+
     #[Route('/campaigns/{id}/delete', name: 'campaign_delete', methods: ['POST'])]
     #[IsGranted('ROLE_USER')]
     public function delete(
