@@ -1,0 +1,5 @@
+oi_mailflow:
+    default_batch_size: 50
+    default_send_interval: 30
+    smtp_connection_timeout: 10
+    max_retry_count: 3

@@ -56,12 +56,40 @@
 - **US-003**: Verificare che i bundle Oimmei carichino con SF7.4
 - **US-004**: Verificare JWT login
 - **US-011**: `composer require oi/mailflow:@dev` + registrazione in `bundles.php`
-- **US-012**: Creare `config/packages/oi_mailflow.yaml`
 - **US-013**: Verifica frontend in browser
 
 ### Note per il Prossimo
 
 - PHP non disponibile in questo ambiente — tutte le verifiche `bin/console` vanno eseguite sull'host
-- Il bundle usa `MappedSuperclass` → le entità concrete vanno create in `server-sf7/src/Entity/`
+- Il bundle usa `MappedSuperclass` → le entità concrete vanno create in `server-sf7/src/Entity/` (in PRD-02, 03, 04...)
 - Dopo `composer update`, verificare deprecation warnings per i bundle Oimmei (potrebbero avere annotation-based config)
+
+---
+
+## 2026-04-29 — US-012: oi_mailflow.yaml creato
+
+### Lavoro Completato
+
+**Feature: US-012 — Configurazione bundle OiMailflow**
+
+- Creato `server-sf7/config/packages/oi_mailflow.yaml` con i quattro parametri di configurazione:
+  - `default_batch_size: 50`
+  - `default_send_interval: 30`
+  - `smtp_connection_timeout: 10`
+  - `max_retry_count: 3`
+- `npm run typecheck`: OK
+- `npm run test`: OK (no tests configured)
+
+### Da Fare (richiede PHP in esecuzione)
+
+- **US-002**: `composer update`
+- **US-003**: Verifica bundle Oimmei con SF7.4
+- **US-004**: Verifica JWT login
+- **US-011**: `composer require oi/mailflow:@dev` + registrazione in `bundles.php` + `bin/console config:dump oi_mailflow` per completare US-012
+- **US-013**: Verifica frontend in browser
+
+### Note per il Prossimo
+
+- PHP non disponibile — tutte le verifiche `bin/console` vanno eseguite sull'host
+- Il file `oi_mailflow.yaml` è pronto ma `bin/console config:dump oi_mailflow` va verificato dopo installazione del bundle (US-011)
 

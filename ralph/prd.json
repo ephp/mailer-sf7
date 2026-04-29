@@ -176,8 +176,8 @@
         "Typecheck passes (bin/console lint:container)"
       ],
       "priority": 12,
-      "passes": false,
-      "notes": "Da creare dopo US-011 (installazione bundle)."
+      "passes": true,
+      "notes": "config/packages/oi_mailflow.yaml creato con tutti e quattro i parametri: default_batch_size=50, default_send_interval=30, smtp_connection_timeout=10, max_retry_count=3. Verifica bin/console da fare dopo installazione bundle (US-011)."
     },
     {
       "id": "US-013",
