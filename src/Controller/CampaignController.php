@@ -7,8 +7,12 @@ use App\Entity\CampaignEmail;
 use App\Entity\MailList;
 use App\Form\CampaignType;
 use App\Message\SendCampaignEmailMessage;
+use App\Repository\CampaignEmailRepository;
 use App\Repository\CampaignRepository;
 use App\Repository\ContactRepository;
+use App\Repository\LinkStatRepository;
+use App\Repository\OpenStatRepository;
+use App\Repository\UnsubscribeRequestRepository;
 use App\Service\AccountMailerFactory;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
@@ -258,6 +262,48 @@ class CampaignController extends AbstractController
             : $translator->trans('campaign.success.sent');
 
         $detail = new ItemDetail($campaign, $message);
+        return new Response($serializer->serialize($detail, 'json'));
+    }
+
+    #[Route('/campaigns/{id}/stats', name: 'campaign_stats', methods: ['GET'])]
+    #[IsGranted('ROLE_USER')]
+    public function stats(
+        int $id,
+        ManagerRegistry $doctrine,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+        CampaignEmailRepository $campaignEmailRepository,
+        OpenStatRepository $openStatRepository,
+        LinkStatRepository $linkStatRepository,
+        UnsubscribeRequestRepository $unsubscribeRepository,
+    ): Response {
+        $campaign = $this->findCampaignForUser($id, $doctrine, $translator, $serializer);
+        if ($campaign instanceof Response) {
+            return $campaign;
+        }
+
+        $totalSent = $campaignEmailRepository->countByCampaignAndStatus($campaign, \Oi\MailflowBundle\Enum\CampaignEmailStatus::Sent);
+        $totalFailed = $campaignEmailRepository->countByCampaignAndStatus($campaign, \Oi\MailflowBundle\Enum\CampaignEmailStatus::Failed);
+        $totalPending = $campaignEmailRepository->countByCampaignAndStatus($campaign, \Oi\MailflowBundle\Enum\CampaignEmailStatus::Pending);
+        $totalBounced = $campaignEmailRepository->countByCampaignAndStatus($campaign, \Oi\MailflowBundle\Enum\CampaignEmailStatus::Bounced);
+        $totalOpens = $openStatRepository->countUniqueByCampaign($campaign);
+        $totalClicks = $linkStatRepository->countUniqueByCampaign($campaign);
+        $totalUnsubscribes = $unsubscribeRepository->countByCampaign($campaign);
+
+        $stats = [
+            'total_sent' => $totalSent,
+            'total_failed' => $totalFailed,
+            'total_pending' => $totalPending,
+            'total_bounced' => $totalBounced,
+            'total_opens' => $totalOpens,
+            'total_clicks' => $totalClicks,
+            'total_unsubscribes' => $totalUnsubscribes,
+            'open_rate' => $totalSent > 0 ? round($totalOpens / $totalSent * 100, 1) : 0.0,
+            'click_rate' => $totalSent > 0 ? round($totalClicks / $totalSent * 100, 1) : 0.0,
+            'unsubscribe_rate' => $totalSent > 0 ? round($totalUnsubscribes / $totalSent * 100, 1) : 0.0,
+        ];
+
+        $detail = new ItemDetail($stats);
         return new Response($serializer->serialize($detail, 'json'));
     }
 

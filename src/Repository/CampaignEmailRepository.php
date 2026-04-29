@@ -28,4 +28,9 @@ class CampaignEmailRepository extends ServiceEntityRepository
     {
         return $this->count(['campaign' => $campaign]);
     }
+
+    public function countByCampaignAndStatus(Campaign $campaign, CampaignEmailStatus $status): int
+    {
+        return $this->count(['campaign' => $campaign, 'status' => $status]);
+    }
 }
