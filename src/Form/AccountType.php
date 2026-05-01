@@ -5,8 +5,10 @@ namespace App\Form;
 use App\Entity\Account;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
+use Symfony\Component\Form\Extension\Core\Type\EmailType;
 use Symfony\Component\Form\Extension\Core\Type\IntegerType;
 use Symfony\Component\Form\Extension\Core\Type\TextType;
+use Symfony\Component\Form\Extension\Core\Type\TextareaType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
@@ -16,8 +18,10 @@ class AccountType extends AbstractType
     {
         $builder
             ->add('ragioneSociale', TextType::class)
+            ->add('emailContatto', EmailType::class)
             ->add('partitaIva', TextType::class, ['required' => false])
-            ->add('indirizzo', TextType::class, ['required' => false])
+            ->add('indirizzo', TextareaType::class, ['required' => false])
+            ->add('mailerDsn', TextType::class, ['required' => false])
             ->add('smtpHost', TextType::class, ['required' => false])
             ->add('smtpPort', IntegerType::class, ['required' => false])
             ->add('smtpUser', TextType::class, ['required' => false])

@@ -29,6 +29,10 @@ services:
     # please note that last definitions always *replace* previous ones
 
 
+    App\Service\SmtpPasswordEncryptor:
+        arguments:
+            $secret: '%kernel.secret%'
+
     gedmo.mapping.driver.attribute:
         class: Gedmo\Mapping\Driver\AttributeReader
 

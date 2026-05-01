@@ -9,6 +9,10 @@ use Symfony\Component\Mailer\Transport;
 
 class AccountMailerFactory
 {
+    public function __construct(
+        private readonly SmtpPasswordEncryptor $encryptor,
+    ) {}
+
     /**
      * Creates a Mailer using the Account's effective DSN, or an explicit DSN override.
      *
@@ -16,7 +20,7 @@ class AccountMailerFactory
      */
     public function createMailer(Account $account, ?string $dsnOverride = null): MailerInterface
     {
-        $dsn = $dsnOverride ?? $account->getEffectiveDsn();
+        $dsn = $dsnOverride ?? $this->resolveAccountDsn($account);
 
         if ($dsn === null) {
             throw new \RuntimeException(
@@ -26,5 +30,30 @@ class AccountMailerFactory
 
         $transport = Transport::fromDsn($dsn);
         return new Mailer($transport);
+    }
+
+    private function resolveAccountDsn(Account $account): ?string
+    {
+        if ($account->getMailerDsn() !== null) {
+            return $account->getMailerDsn();
+        }
+
+        if ($account->getSmtpHost() === null || $account->getSmtpUser() === null) {
+            return null;
+        }
+
+        $rawPassword = $account->getSmtpPassword();
+        $plainPassword = $rawPassword !== null ? $this->encryptor->decrypt($rawPassword) : '';
+        $port = $account->getSmtpPort() ?? 587;
+        $encryption = $account->getSmtpEncryption() ?? 'tls';
+
+        return sprintf(
+            'smtp://%s:%s@%s:%d?encryption=%s',
+            urlencode($account->getSmtpUser()),
+            urlencode($plainPassword),
+            $account->getSmtpHost(),
+            $port,
+            $encryption,
+        );
     }
 }

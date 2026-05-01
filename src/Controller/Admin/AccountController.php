@@ -6,6 +6,7 @@ use App\Entity\Account;
 use App\Form\AccountType;
 use App\Repository\AccountRepository;
 use App\Service\SmtpDiagnosticService;
+use App\Service\SmtpPasswordEncryptor;
 use Doctrine\Persistence\ManagerRegistry;
 use Knp\Component\Pager\PaginatorInterface;
 use Oi\ApiBundle\Model\ItemDetail;
@@ -46,6 +47,58 @@ class AccountController extends AbstractController
             Response::HTTP_OK,
             ['Content-Type' => 'application/json'],
         );
+    }
+
+    #[Route('/account', name: 'account_put', methods: ['PUT'])]
+    #[IsGranted('ROLE_USER')]
+    public function updateAccount(
+        Request $request,
+        ManagerRegistry $doctrine,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+        SmtpPasswordEncryptor $encryptor,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $existingPassword = $account->getSmtpPassword();
+
+        $form = $this->createForm(AccountType::class, $account);
+        $raw = $request->request->all();
+        if (empty($raw)) {
+            $raw = json_decode($request->getContent(), true) ?? [];
+        }
+        $form->submit($raw[$form->getName()] ?? $raw);
+
+        if ($form->isSubmitted() && $form->isValid()) {
+            $newPassword = $account->getSmtpPassword();
+            if (empty($newPassword)) {
+                $account->setSmtpPassword($existingPassword);
+            } else {
+                $account->setSmtpPassword($encryptor->encrypt($newPassword));
+            }
+
+            $doctrine->getManager()->flush();
+
+            return new Response(
+                $serializer->serialize(new ItemDetail($account, $translator->trans('account.success.updated')), 'json', ['groups' => ['account:read']]),
+                Response::HTTP_OK,
+                ['Content-Type' => 'application/json'],
+            );
+        }
+
+        $detail = new ItemDetail(
+            null,
+            $this->formErrorMessageHandler->getErrorMessageFromForm($form),
+            ItemDetail::MESSAGE_ERROR,
+        );
+        return new Response($serializer->serialize($detail, 'json'), Response::HTTP_BAD_REQUEST);
     }
 
     #[Route('/account/my-account', name: 'account_my_account', methods: ['GET'])]
