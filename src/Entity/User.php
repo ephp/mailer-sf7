@@ -16,7 +16,7 @@ class User extends OiUserWithEmail
     #[ORM\Column(length: 255)]
     private ?string $lastName = null;
 
-    #[ORM\ManyToOne(targetEntity: Account::class, inversedBy: 'users')]
+    #[ORM\OneToOne(targetEntity: Account::class, cascade: ['persist'])]
     #[ORM\JoinColumn(name: 'account_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?Account $account = null;
 

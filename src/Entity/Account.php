@@ -3,8 +3,6 @@
 namespace App\Entity;
 
 use App\Repository\AccountRepository;
-use Doctrine\Common\Collections\ArrayCollection;
-use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Timestampable\Traits\TimestampableEntity;
 use Oi\FileBundle\Entity\Upload;
@@ -79,13 +77,12 @@ class Account
     #[ORM\Column(type: 'boolean', options: ['default' => true])]
     private bool $enabled = true;
 
-    #[ORM\OneToMany(targetEntity: User::class, mappedBy: 'account')]
-    private Collection $users;
+    #[ORM\OneToOne(targetEntity: User::class, mappedBy: 'account')]
+    private ?User $user = null;
 
     public function __construct()
     {
         $this->apiKey = bin2hex(random_bytes(32));
-        $this->users = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -258,10 +255,9 @@ class Account
         return $this;
     }
 
-    /** @return Collection<int, User> */
-    public function getUsers(): Collection
+    public function getUser(): ?User
     {
-        return $this->users;
+        return $this->user;
     }
 
     public function getEffectiveDsn(): ?string
