@@ -14,6 +14,7 @@ use Knp\Component\Pager\PaginatorInterface;
 use Oi\ApiBundle\Model\ItemDetail;
 use Oi\ApiBundle\Model\PaginatedList;
 use Oi\ApiBundle\Service\Form\Interfaces\FormErrorMessageHandlerInterface;
+use Oi\FileBundle\Service\FileHandlerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -54,7 +55,7 @@ class AccountController extends AbstractController
         );
     }
 
-    #[Route('/account', name: 'account_put', methods: ['PUT'])]
+    #[Route('/account', name: 'account_put', methods: ['PUT', 'PATCH'])]
     #[IsGranted('ROLE_USER')]
     public function updateAccount(
         Request $request,
@@ -104,6 +105,52 @@ class AccountController extends AbstractController
             ItemDetail::MESSAGE_ERROR,
         );
         return new Response($serializer->serialize($detail, 'json'), Response::HTTP_BAD_REQUEST);
+    }
+
+    #[Route('/account/logo', name: 'account_logo_upload', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function uploadLogo(
+        Request $request,
+        ManagerRegistry $doctrine,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+        FileHandlerInterface $fileHandler,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $file = $request->files->get('logo');
+
+        if ($file === null) {
+            $detail = new ItemDetail(null, 'No file provided', ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_BAD_REQUEST);
+        }
+
+        try {
+            $upload = $fileHandler->makeUploadFromUploadedFile($file, $request);
+            $oldLogo = $account->getLogo();
+            $account->setLogo($upload);
+            $doctrine->getManager()->flush();
+
+            if ($oldLogo !== null) {
+                $fileHandler->deleteFile($oldLogo);
+            }
+
+            return new Response(
+                $serializer->serialize(new ItemDetail($account, $translator->trans('account.success.logo_uploaded')), 'json', ['groups' => ['account:read']]),
+                Response::HTTP_OK,
+                ['Content-Type' => 'application/json'],
+            );
+        } catch (\Exception $e) {
+            $detail = new ItemDetail(null, $e->getMessage(), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
     }
 
     #[Route('/account/test-smtp', name: 'account_test_smtp', methods: ['POST'])]
