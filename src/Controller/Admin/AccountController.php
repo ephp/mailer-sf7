@@ -5,6 +5,7 @@ namespace App\Controller\Admin;
 use App\Entity\Account;
 use App\Form\AccountType;
 use App\Repository\AccountRepository;
+use App\Service\AccountMailerFactory;
 use App\Service\SmtpDiagnosticService;
 use App\Service\SmtpPasswordEncryptor;
 use App\Service\SmtpTester;
@@ -16,6 +17,9 @@ use Oi\ApiBundle\Service\Form\Interfaces\FormErrorMessageHandlerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
+use Symfony\Component\Mime\Address;
+use Symfony\Component\Mime\Email;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\Serializer\SerializerInterface;
@@ -125,6 +129,56 @@ class AccountController extends AbstractController
             Response::HTTP_OK,
             ['Content-Type' => 'application/json'],
         );
+    }
+
+    #[Route('/account/send-test-email', name: 'account_send_test_email', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function sendTestEmail(
+        Request $request,
+        AccountMailerFactory $mailerFactory,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $data = json_decode($request->getContent(), true) ?? [];
+        $to = trim((string) ($data['to'] ?? ''));
+
+        if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            $detail = new ItemDetail(null, 'Indirizzo email destinatario non valido.', ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_BAD_REQUEST);
+        }
+
+        try {
+            $mailer = $mailerFactory->createMailer($account);
+            $fromAddress = $account->getSmtpUser() ?? 'noreply@example.com';
+            $fromName = $account->getRagioneSociale() ?? $fromAddress;
+            $now = (new \DateTimeImmutable())->format('d/m/Y H:i:s');
+
+            $email = (new Email())
+                ->from(new Address($fromAddress, $fromName))
+                ->to($to)
+                ->subject('MailFlow - Email di Test')
+                ->text(sprintf("Questa è un'email di test inviata da MailFlow il %s.\n\nSe hai ricevuto questo messaggio, la configurazione SMTP è corretta.", $now));
+
+            $mailer->send($email);
+        } catch (TransportExceptionInterface $e) {
+            $detail = new ItemDetail(null, $e->getMessage(), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_BAD_REQUEST);
+        } catch (\RuntimeException $e) {
+            $detail = new ItemDetail(null, $e->getMessage(), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_BAD_REQUEST);
+        }
+
+        $detail = new ItemDetail(null, sprintf('Email di test inviata a %s.', $to));
+        return new Response($serializer->serialize($detail, 'json'), Response::HTTP_OK, ['Content-Type' => 'application/json']);
     }
 
     #[Route('/account/my-account', name: 'account_my_account', methods: ['GET'])]
