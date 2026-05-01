@@ -7,6 +7,7 @@ use App\Form\AccountType;
 use App\Repository\AccountRepository;
 use App\Service\SmtpDiagnosticService;
 use App\Service\SmtpPasswordEncryptor;
+use App\Service\SmtpTester;
 use Doctrine\Persistence\ManagerRegistry;
 use Knp\Component\Pager\PaginatorInterface;
 use Oi\ApiBundle\Model\ItemDetail;
@@ -99,6 +100,31 @@ class AccountController extends AbstractController
             ItemDetail::MESSAGE_ERROR,
         );
         return new Response($serializer->serialize($detail, 'json'), Response::HTTP_BAD_REQUEST);
+    }
+
+    #[Route('/account/test-smtp', name: 'account_test_smtp', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function testSmtp(
+        Request $request,
+        SmtpTester $smtpTester,
+        SerializerInterface $serializer,
+    ): Response {
+        $data = json_decode($request->getContent(), true) ?? [];
+
+        if (!empty($data['dsn'])) {
+            $result = $smtpTester->testFromDsn((string) $data['dsn']);
+        } elseif (!empty($data['smtpHost'])) {
+            $port = isset($data['smtpPort']) ? (int) $data['smtpPort'] : 587;
+            $result = $smtpTester->testFromFields((string) $data['smtpHost'], $port);
+        } else {
+            $result = ['success' => false, 'error' => 'No DSN or SMTP host provided'];
+        }
+
+        return new Response(
+            $serializer->serialize($result, 'json'),
+            Response::HTTP_OK,
+            ['Content-Type' => 'application/json'],
+        );
     }
 
     #[Route('/account/my-account', name: 'account_my_account', methods: ['GET'])]
