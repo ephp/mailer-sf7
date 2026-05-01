@@ -7,6 +7,8 @@ use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Timestampable\Traits\TimestampableEntity;
 use Oi\FileBundle\Entity\Upload;
 use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
+use Symfony\Component\Serializer\Attribute\Groups;
+use Symfony\Component\Serializer\Attribute\Ignore;
 use Symfony\Component\Validator\Constraints as Assert;
 
 #[ORM\Table(name: 'account')]
@@ -85,11 +87,13 @@ class Account
         $this->apiKey = bin2hex(random_bytes(32));
     }
 
+    #[Groups(['account:read'])]
     public function getId(): ?int
     {
         return $this->id;
     }
 
+    #[Groups(['account:read'])]
     public function getRagioneSociale(): ?string
     {
         return $this->ragioneSociale;
@@ -101,6 +105,7 @@ class Account
         return $this;
     }
 
+    #[Groups(['account:read'])]
     public function getEmailContatto(): ?string
     {
         return $this->emailContatto;
@@ -112,6 +117,7 @@ class Account
         return $this;
     }
 
+    #[Groups(['account:read'])]
     public function getPartitaIva(): ?string
     {
         return $this->partitaIva;
@@ -123,6 +129,7 @@ class Account
         return $this;
     }
 
+    #[Groups(['account:read'])]
     public function getIndirizzo(): ?string
     {
         return $this->indirizzo;
@@ -134,6 +141,7 @@ class Account
         return $this;
     }
 
+    #[Groups(['account:read'])]
     public function getMailerDsn(): ?string
     {
         return $this->mailerDsn;
@@ -145,6 +153,7 @@ class Account
         return $this;
     }
 
+    #[Groups(['account:read'])]
     public function getSmtpHost(): ?string
     {
         return $this->smtpHost;
@@ -156,6 +165,7 @@ class Account
         return $this;
     }
 
+    #[Groups(['account:read'])]
     public function getSmtpPort(): ?int
     {
         return $this->smtpPort;
@@ -167,6 +177,7 @@ class Account
         return $this;
     }
 
+    #[Groups(['account:read'])]
     public function getSmtpUser(): ?string
     {
         return $this->smtpUser;
@@ -189,6 +200,7 @@ class Account
         return $this;
     }
 
+    #[Groups(['account:read'])]
     public function getSmtpEncryption(): ?string
     {
         return $this->smtpEncryption;
@@ -200,6 +212,7 @@ class Account
         return $this;
     }
 
+    #[Groups(['account:read'])]
     public function getLogo(): ?Upload
     {
         return $this->logo;
@@ -211,6 +224,7 @@ class Account
         return $this;
     }
 
+    #[Groups(['account:read'])]
     public function getBatchSize(): int
     {
         return $this->batchSize;
@@ -222,6 +236,7 @@ class Account
         return $this;
     }
 
+    #[Groups(['account:read'])]
     public function getSendInterval(): int
     {
         return $this->sendInterval;
@@ -233,6 +248,7 @@ class Account
         return $this;
     }
 
+    #[Groups(['account:read'])]
     public function getApiKey(): string
     {
         return $this->apiKey;
@@ -244,6 +260,7 @@ class Account
         return $this;
     }
 
+    #[Groups(['account:read'])]
     public function isEnabled(): bool
     {
         return $this->enabled;
@@ -255,6 +272,19 @@ class Account
         return $this;
     }
 
+    #[Groups(['account:read'])]
+    public function getCreatedAt(): ?\DateTime
+    {
+        return $this->createdAt;
+    }
+
+    #[Groups(['account:read'])]
+    public function getUpdatedAt(): ?\DateTime
+    {
+        return $this->updatedAt;
+    }
+
+    #[Ignore]
     public function getUser(): ?User
     {
         return $this->user;

@@ -26,6 +26,28 @@ class AccountController extends AbstractController
         private readonly FormErrorMessageHandlerInterface $formErrorMessageHandler,
     ) {}
 
+    #[Route('/account', name: 'account_get', methods: ['GET'])]
+    #[IsGranted('ROLE_USER')]
+    public function getAccount(
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        return new Response(
+            $serializer->serialize(new ItemDetail($account), 'json', ['groups' => ['account:read']]),
+            Response::HTTP_OK,
+            ['Content-Type' => 'application/json'],
+        );
+    }
+
     #[Route('/account/my-account', name: 'account_my_account', methods: ['GET'])]
     #[IsGranted('ROLE_USER')]
     public function myAccount(
