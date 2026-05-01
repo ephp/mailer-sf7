@@ -8,7 +8,7 @@ use App\Entity\LinkStat;
 use App\Message\SendCampaignEmailMessage;
 use App\Service\AccountMailerFactory;
 use Doctrine\ORM\EntityManagerInterface;
-use Oi\MailflowBundle\Enum\CampaignEmailStatus;
+use Ephp\MailflowBundle\Enum\CampaignEmailStatus;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
@@ -21,7 +21,7 @@ class SendCampaignEmailMessageHandler
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly AccountMailerFactory $mailerFactory,
-        #[Autowire('%oi_mailflow.max_retry_count%')]
+        #[Autowire('%ephp_mailflow.max_retry_count%')]
         private readonly int $maxRetryCount,
         #[Autowire('%app_url%')]
         private readonly string $appUrl,
@@ -40,7 +40,7 @@ class SendCampaignEmailMessageHandler
         $account = $campaign->getAccount();
         $mailList = $campaignEmail->getMailList();
 
-        $dsn = $mailList?->getMailerDsnOverride() ?? $account->getSmtpDsn();
+        $dsn = $mailList?->getMailerDsnOverride() ?? $account->getEffectiveDsn();
         $mailer = $this->mailerFactory->createMailer($dsn);
 
         $body = $this->buildBody(
@@ -99,8 +99,10 @@ class SendCampaignEmailMessageHandler
 
     private function injectLinkTracking(string $body, CampaignEmail $campaignEmail): string
     {
-        return preg_replace_callback(
-            '/(<a\b[^>]*\bhref=)(["'])(https?:\/\/[^"\']+)\2/i',
+        $pattern = '#(<a\b[^>]*\bhref=)(["\'])((https?://)[^"\']+)\2#i';
+
+        $result = preg_replace_callback(
+            $pattern,
             function (array $matches) use ($campaignEmail): string {
                 $originalUrl = $matches[3];
                 $token = $this->generateUuid();
@@ -109,8 +111,10 @@ class SendCampaignEmailMessageHandler
                 $this->em->persist($linkStat);
                 return $matches[1] . $matches[2] . $this->appUrl . '/t/click/' . $token . $matches[2];
             },
-            $body,
-        ) ?? $body;
+            $body
+        );
+
+        return $result ?? $body;
     }
 
     private function injectOpenPixel(string $body, CampaignEmail $campaignEmail): string

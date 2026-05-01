@@ -42,9 +42,9 @@ class CampaignController extends AbstractController
         private readonly AccountMailerFactory $mailerFactory,
         private readonly MessageBusInterface $bus,
         private readonly ContactRepository $contactRepository,
-        #[Autowire('%oi_mailflow.default_batch_size%')]
+        #[Autowire('%ephp_mailflow.default_batch_size%')]
         private readonly int $batchSize,
-        #[Autowire('%oi_mailflow.default_send_interval%')]
+        #[Autowire('%ephp_mailflow.default_send_interval%')]
         private readonly int $sendInterval,
     ) {}
 
@@ -200,7 +200,7 @@ class CampaignController extends AbstractController
         }
 
         $account = $campaign->getAccount();
-        $dsn = $account->getSmtpDsn();
+        $dsn = $account->getEffectiveDsn();
 
         try {
             $mailer = $this->mailerFactory->createMailer($dsn);
@@ -282,10 +282,10 @@ class CampaignController extends AbstractController
             return $campaign;
         }
 
-        $totalSent = $campaignEmailRepository->countByCampaignAndStatus($campaign, \Oi\MailflowBundle\Enum\CampaignEmailStatus::Sent);
-        $totalFailed = $campaignEmailRepository->countByCampaignAndStatus($campaign, \Oi\MailflowBundle\Enum\CampaignEmailStatus::Failed);
-        $totalPending = $campaignEmailRepository->countByCampaignAndStatus($campaign, \Oi\MailflowBundle\Enum\CampaignEmailStatus::Pending);
-        $totalBounced = $campaignEmailRepository->countByCampaignAndStatus($campaign, \Oi\MailflowBundle\Enum\CampaignEmailStatus::Bounced);
+        $totalSent = $campaignEmailRepository->countByCampaignAndStatus($campaign, \Ephp\MailflowBundle\Enum\CampaignEmailStatus::Sent);
+        $totalFailed = $campaignEmailRepository->countByCampaignAndStatus($campaign, \Ephp\MailflowBundle\Enum\CampaignEmailStatus::Failed);
+        $totalPending = $campaignEmailRepository->countByCampaignAndStatus($campaign, \Ephp\MailflowBundle\Enum\CampaignEmailStatus::Pending);
+        $totalBounced = $campaignEmailRepository->countByCampaignAndStatus($campaign, \Ephp\MailflowBundle\Enum\CampaignEmailStatus::Bounced);
         $totalOpens = $openStatRepository->countUniqueByCampaign($campaign);
         $totalClicks = $linkStatRepository->countUniqueByCampaign($campaign);
         $totalUnsubscribes = $unsubscribeRepository->countByCampaign($campaign);

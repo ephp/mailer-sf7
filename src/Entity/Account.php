@@ -6,6 +6,8 @@ use App\Repository\AccountRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
+use Gedmo\Timestampable\Traits\TimestampableEntity;
+use Oi\FileBundle\Entity\Upload;
 use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 use Symfony\Component\Validator\Constraints as Assert;
 
@@ -14,8 +16,10 @@ use Symfony\Component\Validator\Constraints as Assert;
 #[UniqueEntity(fields: ['ragioneSociale'], message: 'account.error.ragione_sociale.unique')]
 class Account
 {
+    use TimestampableEntity;
+
     #[ORM\Id]
-    #[ORM\GeneratedValue]
+    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
     #[ORM\Column(type: 'integer')]
     private ?int $id = null;
 
@@ -24,13 +28,20 @@ class Account
     #[Assert\Length(max: 255)]
     private ?string $ragioneSociale = null;
 
+    #[ORM\Column(length: 255)]
+    #[Assert\NotBlank]
+    #[Assert\Email]
+    private ?string $emailContatto = null;
+
     #[ORM\Column(length: 30, nullable: true)]
     #[Assert\Length(max: 30)]
     private ?string $partitaIva = null;
 
-    #[ORM\Column(length: 500, nullable: true)]
-    #[Assert\Length(max: 500)]
+    #[ORM\Column(type: 'text', nullable: true)]
     private ?string $indirizzo = null;
+
+    #[ORM\Column(type: 'text', nullable: true)]
+    private ?string $mailerDsn = null;
 
     #[ORM\Column(length: 255, nullable: true)]
     #[Assert\Length(max: 255)]
@@ -51,6 +62,16 @@ class Account
     #[ORM\Column(length: 20, nullable: true)]
     #[Assert\Choice(choices: ['tls', 'ssl', 'none'])]
     private ?string $smtpEncryption = null;
+
+    #[ORM\ManyToOne(targetEntity: Upload::class)]
+    #[ORM\JoinColumn(name: 'logo_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
+    private ?Upload $logo = null;
+
+    #[ORM\Column(type: 'integer', options: ['default' => 50])]
+    private int $batchSize = 50;
+
+    #[ORM\Column(type: 'integer', options: ['default' => 30])]
+    private int $sendInterval = 30;
 
     #[ORM\Column(length: 64, unique: true)]
     private string $apiKey;
@@ -83,6 +104,17 @@ class Account
         return $this;
     }
 
+    public function getEmailContatto(): ?string
+    {
+        return $this->emailContatto;
+    }
+
+    public function setEmailContatto(string $emailContatto): static
+    {
+        $this->emailContatto = $emailContatto;
+        return $this;
+    }
+
     public function getPartitaIva(): ?string
     {
         return $this->partitaIva;
@@ -102,6 +134,17 @@ class Account
     public function setIndirizzo(?string $indirizzo): static
     {
         $this->indirizzo = $indirizzo;
+        return $this;
+    }
+
+    public function getMailerDsn(): ?string
+    {
+        return $this->mailerDsn;
+    }
+
+    public function setMailerDsn(?string $mailerDsn): static
+    {
+        $this->mailerDsn = $mailerDsn;
         return $this;
     }
 
@@ -160,6 +203,39 @@ class Account
         return $this;
     }
 
+    public function getLogo(): ?Upload
+    {
+        return $this->logo;
+    }
+
+    public function setLogo(?Upload $logo): static
+    {
+        $this->logo = $logo;
+        return $this;
+    }
+
+    public function getBatchSize(): int
+    {
+        return $this->batchSize;
+    }
+
+    public function setBatchSize(int $batchSize): static
+    {
+        $this->batchSize = $batchSize;
+        return $this;
+    }
+
+    public function getSendInterval(): int
+    {
+        return $this->sendInterval;
+    }
+
+    public function setSendInterval(int $sendInterval): static
+    {
+        $this->sendInterval = $sendInterval;
+        return $this;
+    }
+
     public function getApiKey(): string
     {
         return $this->apiKey;
@@ -188,8 +264,12 @@ class Account
         return $this->users;
     }
 
-    public function getSmtpDsn(): ?string
+    public function getEffectiveDsn(): ?string
     {
+        if ($this->mailerDsn !== null) {
+            return $this->mailerDsn;
+        }
+
         if ($this->smtpHost === null || $this->smtpUser === null) {
             return null;
         }
