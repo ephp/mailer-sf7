@@ -2,24 +2,29 @@
 
 namespace App\Service;
 
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use App\Entity\Account;
 use Symfony\Component\Mailer\Mailer;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mailer\Transport;
 
 class AccountMailerFactory
 {
-    public function __construct(
-        #[Autowire(env: 'MAILER_DSN')]
-        private readonly string $defaultDsn,
-    ) {}
-
     /**
-     * Creates a Mailer using the given DSN, or the default env DSN if null.
+     * Creates a Mailer using the Account's effective DSN, or an explicit DSN override.
+     *
+     * @throws \RuntimeException if no DSN is configured on the account
      */
-    public function createMailer(?string $dsn = null): MailerInterface
+    public function createMailer(Account $account, ?string $dsnOverride = null): MailerInterface
     {
-        $transport = Transport::fromDsn($dsn ?? $this->defaultDsn);
+        $dsn = $dsnOverride ?? $account->getEffectiveDsn();
+
+        if ($dsn === null) {
+            throw new \RuntimeException(
+                sprintf('No mailer DSN configured for account "%s" (id: %d).', $account->getRagioneSociale() ?? '', (int) $account->getId())
+            );
+        }
+
+        $transport = Transport::fromDsn($dsn);
         return new Mailer($transport);
     }
 }

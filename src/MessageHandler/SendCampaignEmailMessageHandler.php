@@ -40,8 +40,7 @@ class SendCampaignEmailMessageHandler
         $account = $campaign->getAccount();
         $mailList = $campaignEmail->getMailList();
 
-        $dsn = $mailList?->getMailerDsnOverride() ?? $account->getEffectiveDsn();
-        $mailer = $this->mailerFactory->createMailer($dsn);
+        $mailer = $this->mailerFactory->createMailer($account, $mailList?->getMailerDsnOverride());
 
         $body = $this->buildBody(
             $campaign->getBody() ?? '',

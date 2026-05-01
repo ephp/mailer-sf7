@@ -200,10 +200,9 @@ class CampaignController extends AbstractController
         }
 
         $account = $campaign->getAccount();
-        $dsn = $account->getEffectiveDsn();
 
         try {
-            $mailer = $this->mailerFactory->createMailer($dsn);
+            $mailer = $this->mailerFactory->createMailer($account);
             $fromAddress = $account->getSmtpUser() ?? 'noreply@example.com';
             $fromName = $account->getRagioneSociale() ?? $fromAddress;
 
