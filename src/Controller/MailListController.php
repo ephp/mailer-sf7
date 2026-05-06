@@ -2,9 +2,9 @@
 
 namespace App\Controller;
 
-use App\Entity\Account;
 use App\Entity\MailList;
 use App\Form\MailListType;
+use App\Repository\CampaignRepository;
 use App\Repository\MailListRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use Knp\Component\Pager\PaginatorInterface;
@@ -170,44 +170,40 @@ class MailListController extends AbstractController
         return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
     }
 
-    #[Route('/lists/{id}/delete', name: 'maillist_delete', methods: ['POST'])]
+    #[Route('/lists/{id}', name: 'maillist_delete', methods: ['DELETE'])]
     #[IsGranted('ROLE_USER')]
     public function delete(
-        int                 $id,
-        ManagerRegistry     $doctrine,
-        SerializerInterface $serializer,
-        TranslatorInterface $translator,
+        int                  $id,
+        MailListRepository   $mailListRepository,
+        CampaignRepository   $campaignRepository,
+        ManagerRegistry      $doctrine,
+        SerializerInterface  $serializer,
+        TranslatorInterface  $translator,
     ): Response {
-        $mailList = $this->findMailListForUser($id, $doctrine, $translator, $serializer);
-        if ($mailList instanceof Response) {
-            return $mailList;
-        }
-
-        $em = $doctrine->getManager();
-        $em->remove($mailList);
-        $em->flush();
-
-        $detail = new ItemDetail(null, $translator->trans('maillist.success.deleted'));
-        return new Response($serializer->serialize($detail, 'json'));
-    }
-
-    private function findMailListForUser(
-        int                 $id,
-        ManagerRegistry     $doctrine,
-        TranslatorInterface $translator,
-        SerializerInterface $serializer,
-    ): MailList|Response {
         /** @var \App\Entity\User $user */
         $user = $this->getUser();
         $account = $user->getAccount();
 
-        $mailList = $doctrine->getManager()->find(MailList::class, $id);
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
 
-        if ($mailList === null || $mailList->getAccountId() !== $account?->getId()) {
+        $mailList = $mailListRepository->findOneByIdAndAccount($id, $account);
+
+        if ($mailList === null) {
             $detail = new ItemDetail(null, $translator->trans('maillist.error.not_found'), ItemDetail::MESSAGE_ERROR);
             return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
         }
 
-        return $mailList;
+        if ($campaignRepository->countActiveCampaignsByMailList($mailList) > 0) {
+            $detail = new ItemDetail(null, $translator->trans('maillist.error.has_active_campaigns'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_CONFLICT);
+        }
+
+        $mailList->setDeletedAt(new \DateTime());
+        $doctrine->getManager()->flush();
+
+        return new Response(null, Response::HTTP_NO_CONTENT);
     }
 }
