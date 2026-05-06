@@ -86,7 +86,7 @@ class MailListController extends AbstractController
         return new Response($serializer->serialize(new ItemDetail($mailList), 'json', ['groups' => ['list:read', 'list:detail']]));
     }
 
-    #[Route('/lists-new', name: 'maillist_new', methods: ['POST'])]
+    #[Route('/lists', name: 'maillist_new', methods: ['POST'])]
     #[IsGranted('ROLE_USER')]
     public function new(
         Request             $request,
@@ -115,7 +115,7 @@ class MailListController extends AbstractController
             $em->flush();
 
             $detail = new ItemDetail($mailList, $translator->trans('maillist.success.created'));
-            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_CREATED);
+            return new Response($serializer->serialize($detail, 'json', ['groups' => ['list:read']]), Response::HTTP_CREATED);
         }
 
         $detail = new ItemDetail(
@@ -126,18 +126,30 @@ class MailListController extends AbstractController
         return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
     }
 
-    #[Route('/lists/{id}/edit', name: 'maillist_edit', methods: ['POST'])]
+    #[Route('/lists/{id}', name: 'maillist_update', methods: ['PUT'])]
     #[IsGranted('ROLE_USER')]
-    public function edit(
+    public function update(
         int                 $id,
         Request             $request,
+        MailListRepository  $mailListRepository,
         ManagerRegistry     $doctrine,
         SerializerInterface $serializer,
         TranslatorInterface $translator,
     ): Response {
-        $mailList = $this->findMailListForUser($id, $doctrine, $translator, $serializer);
-        if ($mailList instanceof Response) {
-            return $mailList;
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $mailList = $mailListRepository->findOneByIdAndAccount($id, $account);
+
+        if ($mailList === null) {
+            $detail = new ItemDetail(null, $translator->trans('maillist.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
         }
 
         $form = $this->createForm(MailListType::class, $mailList);
@@ -147,11 +159,11 @@ class MailListController extends AbstractController
             $doctrine->getManager()->flush();
 
             $detail = new ItemDetail($mailList, $translator->trans('maillist.success.updated'));
-            return new Response($serializer->serialize($detail, 'json'));
+            return new Response($serializer->serialize($detail, 'json', ['groups' => ['list:read']]), Response::HTTP_OK);
         }
 
         $detail = new ItemDetail(
-            $mailList,
+            null,
             $this->formErrorMessageHandler->getErrorMessageFromForm($form),
             ItemDetail::MESSAGE_ERROR,
         );
