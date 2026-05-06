@@ -175,6 +175,12 @@ class MailList
     }
 
     #[Groups(['list:read'])]
+    public function getActiveCount(): int
+    {
+        return $this->contacts->filter(fn($c) => $c->isIscritto() === true)->count();
+    }
+
+    #[Groups(['list:read'])]
     public function getCreatedAt(): ?\DateTime
     {
         return $this->createdAt;

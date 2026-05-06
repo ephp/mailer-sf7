@@ -44,10 +44,11 @@ class MailListController extends AbstractController
             return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
         }
 
-        $qb = $mailListRepository->createQueryBuilder('ml')
-            ->where('ml.account = :account')
-            ->setParameter('account', $account)
-            ->orderBy('ml.name', 'ASC');
+        $search = $request->query->get('search');
+        $sort = $request->query->get('sort', 'name');
+        $direction = $request->query->get('direction', 'asc');
+
+        $qb = $mailListRepository->findByAccountQuery($account, $search, $sort, $direction);
 
         $pagination = $paginator->paginate(
             $qb,
@@ -55,7 +56,7 @@ class MailListController extends AbstractController
             $request->query->getInt('per_page', 20),
         );
 
-        return new Response($serializer->serialize(new PaginatedList($pagination), 'json'));
+        return new Response($serializer->serialize(new PaginatedList($pagination), 'json', ['groups' => ['list:read']]));
     }
 
     #[Route('/lists/{id}', name: 'maillist_find', methods: ['GET'])]

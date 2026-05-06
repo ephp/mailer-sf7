@@ -44,13 +44,17 @@ class MailListRepository extends ServiceEntityRepository
             ->getOneOrNullResult();
     }
 
-    public function findByAccountQuery(Account $account, ?string $search = null): QueryBuilder
+    public function findByAccountQuery(Account $account, ?string $search = null, string $sort = 'name', string $direction = 'asc'): QueryBuilder
     {
+        $allowedSorts = ['name', 'createdAt', 'updatedAt'];
+        $sortField = in_array($sort, $allowedSorts, true) ? $sort : 'name';
+        $sortDirection = strtoupper($direction) === 'DESC' ? 'DESC' : 'ASC';
+
         $qb = $this->createQueryBuilder('ml')
             ->andWhere('ml.account = :account')
             ->andWhere('ml.deletedAt IS NULL')
             ->setParameter('account', $account)
-            ->orderBy('ml.name', 'ASC');
+            ->orderBy('ml.' . $sortField, $sortDirection);
 
         if ($search !== null && $search !== '') {
             $qb->andWhere('ILIKE(ml.name, :search) = TRUE')
