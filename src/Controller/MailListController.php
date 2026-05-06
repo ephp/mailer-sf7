@@ -126,7 +126,7 @@ class MailListController extends AbstractController
         return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
     }
 
-    #[Route('/lists/{id}', name: 'maillist_update', methods: ['PUT'])]
+    #[Route('/lists/{id}', name: 'maillist_update', methods: ['PUT', 'PATCH'])]
     #[IsGranted('ROLE_USER')]
     public function update(
         int                 $id,
