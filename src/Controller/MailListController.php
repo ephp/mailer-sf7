@@ -63,16 +63,27 @@ class MailListController extends AbstractController
     #[IsGranted('ROLE_USER')]
     public function find(
         int                 $id,
-        ManagerRegistry     $doctrine,
+        MailListRepository  $mailListRepository,
         SerializerInterface $serializer,
         TranslatorInterface $translator,
     ): Response {
-        $mailList = $this->findMailListForUser($id, $doctrine, $translator, $serializer);
-        if ($mailList instanceof Response) {
-            return $mailList;
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
         }
 
-        return new Response($serializer->serialize(new ItemDetail($mailList), 'json'));
+        $mailList = $mailListRepository->findOneByIdAndAccount($id, $account);
+
+        if ($mailList === null) {
+            $detail = new ItemDetail(null, $translator->trans('maillist.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        return new Response($serializer->serialize(new ItemDetail($mailList), 'json', ['groups' => ['list:read', 'list:detail']]));
     }
 
     #[Route('/lists-new', name: 'maillist_new', methods: ['POST'])]
