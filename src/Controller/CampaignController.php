@@ -288,6 +288,41 @@ class CampaignController extends AbstractController
         return new Response(null, Response::HTTP_NO_CONTENT);
     }
 
+    #[Route('/campaigns/recipients-count', name: 'campaign_recipients_count', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function recipientsCount(
+        Request $request,
+        EntityManagerInterface $em,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $data = json_decode($request->getContent(), true) ?? [];
+        $mailListIds = (array) ($data['mailListIds'] ?? []);
+        $taxonomyTermIds = array_map('intval', (array) ($data['filter']['taxonomyTermIds'] ?? []));
+
+        $validMailLists = [];
+        foreach ($mailListIds as $listId) {
+            $mailList = $em->find(MailList::class, (int) $listId);
+            if ($mailList !== null && $mailList->getAccountId() === $account->getId()) {
+                $validMailLists[] = $mailList;
+            }
+        }
+
+        $count = $this->contactRepository->countRecipientsForLists($validMailLists, $taxonomyTermIds);
+
+        $detail = new ItemDetail(['count' => $count]);
+        return new Response($serializer->serialize($detail, 'json'), Response::HTTP_OK);
+    }
+
     #[Route('/campaigns-new', name: 'campaign_new', methods: ['POST'])]
     #[IsGranted('ROLE_USER')]
     public function new(
