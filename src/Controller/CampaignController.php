@@ -5,6 +5,7 @@ namespace App\Controller;
 use App\Entity\Campaign;
 use App\Entity\CampaignEmail;
 use App\Entity\MailList;
+use App\Form\CampaignCreateType;
 use App\Form\CampaignType;
 use App\Message\SendCampaignEmailMessage;
 use App\Repository\CampaignEmailRepository;
@@ -87,16 +88,98 @@ class CampaignController extends AbstractController
     #[IsGranted('ROLE_USER')]
     public function find(
         int $id,
-        ManagerRegistry $doctrine,
+        CampaignRepository $campaignRepository,
         SerializerInterface $serializer,
         TranslatorInterface $translator,
     ): Response {
-        $campaign = $this->findCampaignForUser($id, $doctrine, $translator, $serializer);
-        if ($campaign instanceof Response) {
-            return $campaign;
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
         }
 
-        return new Response($serializer->serialize(new ItemDetail($campaign), 'json'));
+        $campaign = $campaignRepository->findOneByIdAndAccount($id, $account);
+
+        if ($campaign === null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        return new Response($serializer->serialize(new ItemDetail($campaign), 'json', ['groups' => ['campaign:read']]));
+    }
+
+    #[Route('/campaigns', name: 'campaign_create', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function create(
+        Request $request,
+        CampaignRepository $campaignRepository,
+        EntityManagerInterface $em,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $data = json_decode($request->getContent(), true) ?? [];
+
+        $form = $this->createForm(CampaignCreateType::class);
+        $form->submit($data);
+
+        if (!$form->isSubmitted() || !$form->isValid()) {
+            $detail = new ItemDetail(
+                null,
+                $this->formErrorMessageHandler->getErrorMessageFromForm($form),
+                ItemDetail::MESSAGE_ERROR,
+            );
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $campaign = new Campaign();
+        $campaign->setAccount($account);
+        $campaign->setDraft(true);
+        $campaign->setStatus('draft');
+        $campaign->setTemplate(false);
+
+        $fromTemplateId = $form->get('fromTemplateId')->getData();
+
+        if ($fromTemplateId !== null) {
+            $template = $campaignRepository->findOneByIdAndAccount((int) $fromTemplateId, $account);
+
+            if ($template === null || !$template->isTemplate()) {
+                $detail = new ItemDetail(null, $translator->trans('campaign.error.template_not_found'), ItemDetail::MESSAGE_ERROR);
+                return new Response($serializer->serialize($detail, 'json'), Response::HTTP_BAD_REQUEST);
+            }
+
+            $campaign->setName($template->getName());
+            $campaign->setEmailSubject($template->getEmailSubject());
+            $campaign->setSnippet($template->getSnippet());
+            $campaign->setBody($template->getBody());
+            $campaign->setStructure($template->getStructure());
+            $campaign->setComposition($template->getComposition());
+            $campaign->setFilter($template->getFilter());
+            $campaign->setClonedFrom($template);
+
+            foreach ($template->getMailLists() as $mailList) {
+                $campaign->getMailLists()->add($mailList);
+            }
+        }
+
+        $em->persist($campaign);
+        $em->flush();
+
+        return new Response(
+            $serializer->serialize(new ItemDetail($campaign), 'json', ['groups' => ['campaign:read']]),
+            Response::HTTP_CREATED,
+        );
     }
 
     #[Route('/campaigns-new', name: 'campaign_new', methods: ['POST'])]
