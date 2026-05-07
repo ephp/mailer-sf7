@@ -66,19 +66,21 @@ class CampaignController extends AbstractController
             return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
         }
 
-        $qb = $campaignRepository->createQueryBuilder('c')
-            ->where('c.account = :account')
-            ->andWhere('c.template = false')
-            ->setParameter('account', $account)
-            ->orderBy('c.createdAt', 'DESC');
+        $status = $request->query->get('status');
+        $template = $request->query->getBoolean('template', false);
+        $sort = $request->query->get('sort', 'createdAt');
+        $direction = $request->query->get('direction', 'desc');
+
+        $qb = $campaignRepository->findByAccountQuery($account, $status, $template, $sort, $direction);
 
         $pagination = $paginator->paginate(
             $qb,
             $request->query->getInt('page', 1),
             $request->query->getInt('per_page', 20),
+            ['sortFieldParameterName' => '_disabled_sort'],
         );
 
-        return new Response($serializer->serialize(new PaginatedList($pagination), 'json'));
+        return new Response($serializer->serialize(new PaginatedList($pagination), 'json', ['groups' => ['campaign:read']]));
     }
 
     #[Route('/campaigns/{id}', name: 'campaign_find', methods: ['GET'])]
@@ -203,8 +205,8 @@ class CampaignController extends AbstractController
 
         try {
             $mailer = $this->mailerFactory->createMailer($account);
-            $fromAddress = $account->getSmtpUser() ?? 'noreply@example.com';
-            $fromName = $account->getRagioneSociale() ?? $fromAddress;
+            $fromAddress = $account->getMailFrom();
+            $fromName = $account->getMailFromName();
 
             $email = (new Email())
                 ->from(new Address($fromAddress, $fromName))
