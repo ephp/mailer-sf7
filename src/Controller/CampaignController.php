@@ -252,6 +252,42 @@ class CampaignController extends AbstractController
         );
     }
 
+    #[Route('/campaigns/{id}', name: 'campaign_destroy', methods: ['DELETE'])]
+    #[IsGranted('ROLE_USER')]
+    public function destroy(
+        int $id,
+        CampaignRepository $campaignRepository,
+        EntityManagerInterface $em,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $campaign = $campaignRepository->findOneByIdAndAccount($id, $account);
+
+        if ($campaign === null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        if (!$campaign->isDraft() || $campaign->getSentAt() !== null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_draft'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_CONFLICT);
+        }
+
+        $em->remove($campaign);
+        $em->flush();
+
+        return new Response(null, Response::HTTP_NO_CONTENT);
+    }
+
     #[Route('/campaigns-new', name: 'campaign_new', methods: ['POST'])]
     #[IsGranted('ROLE_USER')]
     public function new(
