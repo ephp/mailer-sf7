@@ -7,6 +7,7 @@ use App\Entity\CampaignEmail;
 use App\Entity\MailList;
 use App\Form\CampaignCreateType;
 use App\Form\CampaignType;
+use App\Form\CampaignUpdateType;
 use App\Message\SendCampaignEmailMessage;
 use App\Repository\CampaignEmailRepository;
 use App\Repository\CampaignRepository;
@@ -179,6 +180,75 @@ class CampaignController extends AbstractController
         return new Response(
             $serializer->serialize(new ItemDetail($campaign), 'json', ['groups' => ['campaign:read']]),
             Response::HTTP_CREATED,
+        );
+    }
+
+    #[Route('/campaigns/{id}', name: 'campaign_update', methods: ['PUT'])]
+    #[IsGranted('ROLE_USER')]
+    public function update(
+        int $id,
+        Request $request,
+        CampaignRepository $campaignRepository,
+        EntityManagerInterface $em,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $campaign = $campaignRepository->findOneByIdAndAccount($id, $account);
+
+        if ($campaign === null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        if ($campaign->getStatus() !== 'draft' || $campaign->getSentAt() !== null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_draft'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_CONFLICT);
+        }
+
+        $data = json_decode($request->getContent(), true) ?? [];
+
+        $form = $this->createForm(CampaignUpdateType::class, $campaign);
+        $form->submit($data, false);
+
+        if (!$form->isSubmitted() || !$form->isValid()) {
+            $detail = new ItemDetail(
+                null,
+                $this->formErrorMessageHandler->getErrorMessageFromForm($form),
+                ItemDetail::MESSAGE_ERROR,
+            );
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        if (array_key_exists('mailListIds', $data)) {
+            $this->syncMailLists($campaign, (array) $data['mailListIds'], $account, $em);
+        }
+
+        if (array_key_exists('structure', $data) && is_array($data['structure'])) {
+            $campaign->setStructure($data['structure']);
+        }
+
+        if (array_key_exists('composition', $data) && is_array($data['composition'])) {
+            $campaign->setComposition($data['composition']);
+        }
+
+        if (array_key_exists('filter', $data) && is_array($data['filter'])) {
+            $campaign->setFilter($data['filter']);
+        }
+
+        $em->flush();
+
+        return new Response(
+            $serializer->serialize(new ItemDetail($campaign), 'json', ['groups' => ['campaign:read']]),
+            Response::HTTP_OK,
         );
     }
 
