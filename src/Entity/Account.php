@@ -33,6 +33,16 @@ class Account
     #[Assert\Email]
     private ?string $emailContatto = null;
 
+    #[ORM\Column(length: 255)]
+    #[Assert\NotBlank]
+    #[Assert\Email]
+    private ?string $mailFrom = null;
+
+    #[ORM\Column(length: 255)]
+    #[Assert\NotBlank]
+    #[Assert\Length(max: 255)]
+    private ?string $mailFromName = null;
+
     #[ORM\Column(length: 30, nullable: true)]
     #[Assert\Length(max: 30)]
     private ?string $partitaIva = null;
@@ -114,6 +124,30 @@ class Account
     public function setEmailContatto(string $emailContatto): static
     {
         $this->emailContatto = $emailContatto;
+        return $this;
+    }
+
+    #[Groups(['account:read'])]
+    public function getMailFrom(): ?string
+    {
+        return $this->mailFrom;
+    }
+
+    public function setMailFrom(string $mailFrom): static
+    {
+        $this->mailFrom = $mailFrom;
+        return $this;
+    }
+
+    #[Groups(['account:read'])]
+    public function getMailFromName(): ?string
+    {
+        return $this->mailFromName;
+    }
+
+    public function setMailFromName(string $mailFromName): static
+    {
+        $this->mailFromName = $mailFromName;
         return $this;
     }
 

@@ -33,4 +33,27 @@ class UnsubscribeRequestRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleScalarResult();
     }
+
+    public function countByAccount(\App\Entity\Account $account): int
+    {
+        return (int) $this->createQueryBuilder('ur')
+            ->select('COUNT(ur.id)')
+            ->innerJoin('ur.campaignEmail', 'ce')
+            ->innerJoin('ce.campaign', 'c')
+            ->where('c.account = :account')
+            ->setParameter('account', $account)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    public function countByMailList(\App\Entity\MailList $mailList): int
+    {
+        return (int) $this->createQueryBuilder('ur')
+            ->select('COUNT(ur.id)')
+            ->innerJoin('ur.campaignEmail', 'ce')
+            ->where('ce.mailList = :mailList')
+            ->setParameter('mailList', $mailList)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
 }

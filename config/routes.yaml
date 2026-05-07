@@ -4,20 +4,13 @@ controllers:
         namespace: App\Controller
     type: attribute
 
-# backend:
-#     resource: ../src/Controller/Backend/*
-#     type: attribute
-#     prefix: /api
-#     options:
-#         api_versions:
-#             - !php/const Oi\ApiBundle\Helper\ApiVersion::V1
-# frontend:
-#     resource: ../src/Controller/Frontend/*
-#     type: attribute
-#     prefix: /api
-#     options:
-#         api_versions:
-#             - !php/const Oi\ApiBundle\Helper\ApiVersion::V1
+tag_routes:
+    resource: .
+    type: api_tag_routes
+    prefix: /api
+    options:
+        api_versions:
+            - !php/const Oi\ApiBundle\Helper\ApiVersion::V1
 
 api_uploader_upload_files:
     path: /api/_uploader/files/upload

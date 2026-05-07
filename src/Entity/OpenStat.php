@@ -4,7 +4,7 @@ namespace App\Entity;
 
 use App\Repository\OpenStatRepository;
 use Doctrine\ORM\Mapping as ORM;
-use Oi\MailflowBundle\Entity\BaseSendStat;
+use Ephp\MailflowBundle\Entity\BaseSendStat;
 use Symfony\Component\Serializer\Attribute\Ignore;
 
 #[ORM\Table(name: 'open_stat')]

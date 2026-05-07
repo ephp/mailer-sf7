@@ -21,17 +21,21 @@
     "oi/geo": "7.0.*",
     "oi/helper": "7.0.*",
     "oi/postgres": "7.0.*",
+    "oi/tag": "*",
     "oi/user-api": "7.0.*",
     "oi/utility": "7.0.*",
-    "oi/mailflow": "@dev",
+    "phpoffice/phpspreadsheet": "^3.0",
     "symfony/console": "7.4.*",
     "symfony/css-selector": "7.4.*",
+    "symfony/doctrine-messenger": "7.4.*",
     "symfony/dom-crawler": "7.4.*",
     "symfony/dotenv": "7.4.*",
     "symfony/flex": "^2",
     "symfony/form": "7.4.*",
     "symfony/framework-bundle": "7.4.*",
     "symfony/http-client": "7.4.*",
+    "symfony/mailer": "7.4.*",
+    "symfony/messenger": "7.4.*",
     "symfony/runtime": "7.4.*",
     "symfony/serializer": "7.4.*",
     "symfony/string": "7.4.*",
@@ -49,7 +53,8 @@
   },
   "autoload": {
     "psr-4": {
-      "App\\": "src/"
+      "App\\": "src/",
+      "Ephp\\MailflowBundle\\": "bundles/MailflowBundle/src/"
     }
   },
   "autoload-dev": {
@@ -89,10 +94,6 @@
     }
   },
   "repositories": [
-    {
-      "type": "path",
-      "url": "../Bundles/MailflowBundle"
-    },
     {
       "type": "composer",
       "url": "https://satis.oimmei.com"

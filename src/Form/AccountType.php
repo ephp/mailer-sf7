@@ -19,6 +19,8 @@ class AccountType extends AbstractType
         $builder
             ->add('ragioneSociale', TextType::class)
             ->add('emailContatto', EmailType::class)
+            ->add('mailFrom', EmailType::class)
+            ->add('mailFromName', TextType::class)
             ->add('partitaIva', TextType::class, ['required' => false])
             ->add('indirizzo', TextareaType::class, ['required' => false])
             ->add('mailerDsn', TextType::class, ['required' => false])

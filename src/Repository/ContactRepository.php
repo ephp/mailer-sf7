@@ -62,6 +62,12 @@ class ContactRepository extends ServiceEntityRepository
     }
 
     /**
+     * Counts unique recipients across the given mail lists, applying taxonomy filters with
+     * AND across categories and OR within the same category.
+     *
+     * Example: termIds=[1=Livorno, 2=Pisa, 3=Sito internet] where 1,2 are in "Area Geografica"
+     * and 3 is in "Canale Acquisizione" → contacts in (Livorno OR Pisa) AND (Sito internet).
+     *
      * @param \App\Entity\MailList[] $mailLists
      * @param int[] $taxonomyTermIds
      */
@@ -79,15 +85,35 @@ class ContactRepository extends ServiceEntityRepository
             ->setParameter('lists', $mailLists);
 
         if (!empty($taxonomyTermIds)) {
-            $subDql = $this->getEntityManager()->createQueryBuilder()
-                ->select('1')
-                ->from(\App\Entity\ContactTaxonomy::class, 'ct')
-                ->where('ct.contact = c')
-                ->andWhere('ct.term IN (:termIds)')
-                ->getDQL();
+            $termRepo = $this->getEntityManager()->getRepository(\App\Entity\TaxonomyTerm::class);
+            /** @var \App\Entity\TaxonomyTerm[] $terms */
+            $terms = $termRepo->findBy(['id' => $taxonomyTermIds]);
 
-            $qb->andWhere($qb->expr()->exists($subDql))
-               ->setParameter('termIds', $taxonomyTermIds);
+            // Group term IDs by their category to apply OR within / AND across.
+            $idsByCategory = [];
+            foreach ($terms as $term) {
+                $catId = $term->getCategoryId();
+                if ($catId === null) {
+                    continue;
+                }
+                $idsByCategory[$catId][] = $term->getId();
+            }
+
+            $idx = 0;
+            foreach ($idsByCategory as $idsInCategory) {
+                $alias = 'ct' . $idx;
+                $param = 'termIds' . $idx;
+                $subDql = $this->getEntityManager()->createQueryBuilder()
+                    ->select('1')
+                    ->from(\App\Entity\ContactTaxonomy::class, $alias)
+                    ->where("{$alias}.contact = c")
+                    ->andWhere("{$alias}.term IN (:{$param})")
+                    ->getDQL();
+
+                $qb->andWhere($qb->expr()->exists($subDql))
+                   ->setParameter($param, $idsInCategory);
+                $idx++;
+            }
         }
 
         return (int) $qb->getQuery()->getSingleScalarResult();

@@ -40,7 +40,7 @@ class SendCampaignEmailMessageHandler
         $account = $campaign->getAccount();
         $mailList = $campaignEmail->getMailList();
 
-        $mailer = $this->mailerFactory->createMailer($account, $mailList?->getMailerDsnOverride());
+        $mailer = $this->mailerFactory->createMailer($account, $mailList?->getEffectiveDsn());
 
         $body = $this->buildBody(
             $campaign->getBody() ?? '',
@@ -58,8 +58,8 @@ class SendCampaignEmailMessageHandler
         // Persist LinkStat records before sending so click links resolve
         $this->em->flush();
 
-        $fromAddress = $account->getSmtpUser() ?? 'noreply@example.com';
-        $fromName = $account->getRagioneSociale() ?? $fromAddress;
+        $fromAddress = $mailList?->getEffectiveMailFrom() ?? $account->getMailFrom();
+        $fromName = $mailList?->getEffectiveMailFromName() ?? $account->getMailFromName();
 
         $email = (new Email())
             ->from(new Address($fromAddress, $fromName))

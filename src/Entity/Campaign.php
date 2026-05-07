@@ -163,6 +163,12 @@ class Campaign extends BaseCampaign
     }
 
     #[Groups(['campaign:read'])]
+    public function getMailListNames(): array
+    {
+        return array_values($this->mailLists->map(fn(MailList $ml) => ['id' => $ml->getId(), 'name' => $ml->getName()])->toArray());
+    }
+
+    #[Groups(['campaign:read'])]
     public function getRecipientCount(): int
     {
         return (int) array_sum($this->mailLists->map(fn(MailList $ml) => $ml->getContactCount())->toArray());

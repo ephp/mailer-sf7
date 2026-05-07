@@ -4,7 +4,7 @@ namespace App\Entity;
 
 use App\Repository\CampaignEmailRepository;
 use Doctrine\ORM\Mapping as ORM;
-use Oi\MailflowBundle\Entity\BaseCampaignEmail;
+use Ephp\MailflowBundle\Entity\BaseCampaignEmail;
 use Symfony\Component\Serializer\Attribute\Ignore;
 
 #[ORM\Table(name: 'campaign_email')]

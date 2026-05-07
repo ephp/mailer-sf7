@@ -183,7 +183,7 @@ class CampaignController extends AbstractController
         );
     }
 
-    #[Route('/campaigns/{id}', name: 'campaign_update', methods: ['PUT'])]
+    #[Route('/campaigns/{id}', name: 'campaign_update', methods: ['PUT', 'PATCH'])]
     #[IsGranted('ROLE_USER')]
     public function update(
         int $id,

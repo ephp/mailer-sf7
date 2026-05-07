@@ -205,8 +205,8 @@ class AccountController extends AbstractController
 
         try {
             $mailer = $mailerFactory->createMailer($account);
-            $fromAddress = $account->getSmtpUser() ?? 'noreply@example.com';
-            $fromName = $account->getRagioneSociale() ?? $fromAddress;
+            $fromAddress = $account->getMailFrom();
+            $fromName = $account->getMailFromName();
             $now = (new \DateTimeImmutable())->format('d/m/Y H:i:s');
 
             $email = (new Email())

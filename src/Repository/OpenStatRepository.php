@@ -33,4 +33,27 @@ class OpenStatRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleScalarResult();
     }
+
+    public function countUniqueByAccount(\App\Entity\Account $account): int
+    {
+        return (int) $this->createQueryBuilder('os')
+            ->select('COUNT(DISTINCT IDENTITY(os.campaignEmail))')
+            ->innerJoin('os.campaignEmail', 'ce')
+            ->innerJoin('ce.campaign', 'c')
+            ->where('c.account = :account')
+            ->setParameter('account', $account)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    public function countUniqueByMailList(\App\Entity\MailList $mailList): int
+    {
+        return (int) $this->createQueryBuilder('os')
+            ->select('COUNT(DISTINCT IDENTITY(os.campaignEmail))')
+            ->innerJoin('os.campaignEmail', 'ce')
+            ->where('ce.mailList = :mailList')
+            ->setParameter('mailList', $mailList)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
 }

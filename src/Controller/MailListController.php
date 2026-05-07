@@ -54,6 +54,7 @@ class MailListController extends AbstractController
             $qb,
             $request->query->getInt('page', 1),
             $request->query->getInt('per_page', 20),
+            ['sortFieldParameterName' => '_disabled_sort'],
         );
 
         return new Response($serializer->serialize(new PaginatedList($pagination), 'json', ['groups' => ['list:read']]));

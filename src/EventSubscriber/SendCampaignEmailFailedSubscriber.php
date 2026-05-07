@@ -5,7 +5,7 @@ namespace App\EventSubscriber;
 use App\Entity\CampaignEmail;
 use App\Message\SendCampaignEmailMessage;
 use Doctrine\ORM\EntityManagerInterface;
-use Oi\MailflowBundle\Enum\CampaignEmailStatus;
+use Ephp\MailflowBundle\Enum\CampaignEmailStatus;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\Messenger\Event\WorkerMessageFailedEvent;
 

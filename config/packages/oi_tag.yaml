@@ -1,0 +1,9 @@
+oi_tag:
+    controllers:
+        taxonomy_term:
+            class: App\Entity\TaxonomyTerm
+            api_prefix: /list-taxonomy-terms
+            route_prefix: taxonomy_term
+            trans_prefix: taxonomy_term
+            default_color: "#000000"
+            selectable_routes: true

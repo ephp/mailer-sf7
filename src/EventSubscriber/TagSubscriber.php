@@ -2,41 +2,50 @@
 
 namespace App\EventSubscriber;
 
-use App\Entity\CampaignEmail;
-use App\Message\SendCampaignEmailMessage;
-use Doctrine\ORM\EntityManagerInterface;
-use Ephp\MailflowBundle\Enum\CampaignEmailStatus;
+use App\Entity\TaxonomyTerm;
+use App\Entity\User;
+use App\Repository\TaxonomyCategoryRepository;
+use Oi\TagBundle\Event\TagPrepareEvent;
+use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
-use Symfony\Component\Messenger\Event\WorkerMessageFailedEvent;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
-class SendCampaignEmailFailedSubscriber implements EventSubscriberInterface
+class TagSubscriber implements EventSubscriberInterface
 {
     public function __construct(
-        private readonly EntityManagerInterface $em,
+        private readonly TaxonomyCategoryRepository $taxonomyCategoryRepository,
+        private readonly Security $security,
     ) {}
 
     public static function getSubscribedEvents(): array
     {
-        return [WorkerMessageFailedEvent::class => 'onMessageFailed'];
+        // The bundle dispatches with the string event name, not the FQCN.
+        return [TagPrepareEvent::NAME => 'onTagPrepare'];
     }
 
-    public function onMessageFailed(WorkerMessageFailedEvent $event): void
+    public function onTagPrepare(TagPrepareEvent $event): void
     {
-        if ($event->willRetry()) {
+        $tag = $event->getTag();
+        if (!$tag instanceof TaxonomyTerm) {
             return;
         }
 
-        $message = $event->getEnvelope()->getMessage();
-        if (!$message instanceof SendCampaignEmailMessage) {
-            return;
+        $categoryId = $event->getRequest()->query->getInt('category_id');
+        if ($categoryId <= 0) {
+            throw new NotFoundHttpException('Parameter category_id missing in request');
         }
 
-        $campaignEmail = $this->em->find(CampaignEmail::class, $message->getCampaignEmailId());
-        if ($campaignEmail === null || $campaignEmail->getStatus() === CampaignEmailStatus::Sent) {
-            return;
+        $category = $this->taxonomyCategoryRepository->find($categoryId);
+
+        $user = $this->security->getUser();
+        $accountId = $user instanceof User ? $user->getAccount()?->getId() : null;
+
+        // Multi-tenant guard: pretend the category does not exist when it
+        // belongs to a different account, so we don't disclose its presence.
+        if ($category === null || $category->getMailList()?->getAccountId() !== $accountId) {
+            throw new NotFoundHttpException('Category not found');
         }
 
-        $campaignEmail->setStatus(CampaignEmailStatus::Failed);
-        $this->em->flush();
+        $tag->setCategory($category);
     }
 }

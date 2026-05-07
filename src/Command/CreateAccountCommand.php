@@ -79,11 +79,15 @@ class CreateAccountCommand extends Command
         $io->section('Dati Account');
         $ragioneSociale = $this->ask($io, 'Ragione Sociale');
         $emailContatto = $this->askEmail($io, 'Email di contatto');
+        $mailFrom = $this->askEmail($io, 'Email mittente (apparirà come From)');
+        $mailFromName = $this->ask($io, 'Nome mittente (apparirà accanto al From)');
         $mailerDsn = $this->askOptional($io, 'Mailer DSN (lascia vuoto per configurare in seguito)');
 
         $account = new Account();
         $account->setRagioneSociale($ragioneSociale);
         $account->setEmailContatto($emailContatto);
+        $account->setMailFrom($mailFrom);
+        $account->setMailFromName($mailFromName);
         if ($mailerDsn !== null) {
             $account->setMailerDsn($mailerDsn);
         }
@@ -100,6 +104,8 @@ class CreateAccountCommand extends Command
             ['Account ID', (string) $account->getId()],
             ['Ragione Sociale', $account->getRagioneSociale()],
             ['Email Contatto', $account->getEmailContatto()],
+            ['Email Mittente', $account->getMailFrom()],
+            ['Nome Mittente', $account->getMailFromName()],
             ['Mailer DSN', $account->getMailerDsn() ?? '(non configurato)'],
             ['API Key', $account->getApiKey()],
         ];

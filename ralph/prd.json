@@ -1,7 +1,7 @@
 {
   "project": "MailFlow",
   "branchName": "ralph/symfony-7.4-upgrade",
-  "description": "Upgrade Symfony 7.3 to 7.4 LTS and create OiMailflowBundle from NewsletterBundle",
+  "description": "Upgrade Symfony 7.3 to 7.4 LTS and create EphpMailflowBundle from NewsletterBundle",
   "userStories": [
     {
       "id": "US-001",
@@ -64,7 +64,7 @@
     {
       "id": "US-005",
       "title": "Create MailflowBundle directory structure",
-      "description": "As a developer, I need to create the basic directory structure for OiMailflowBundle.",
+      "description": "As a developer, I need to create the basic directory structure for EphpMailflowBundle.",
       "acceptanceCriteria": [
         "Directory Bundles/MailflowBundle/ created",
         "Directory Bundles/MailflowBundle/src/ created",
@@ -83,36 +83,36 @@
       "description": "As a developer, I need to create the composer.json for the new bundle.",
       "acceptanceCriteria": [
         "Bundles/MailflowBundle/composer.json exists",
-        "Package name is oi/mailflow",
+        "Package name is ephp/mailflow",
         "Requires PHP ^8.2",
         "Requires symfony/framework-bundle: ^7.4",
-        "Autoload PSR-4 configured for Oi\\MailflowBundle\\",
+        "Autoload PSR-4 configured for Ephp\\MailflowBundle\\",
         "Typecheck passes"
       ],
       "priority": 6,
       "passes": true,
-      "notes": "composer.json creato con tutte le dipendenze SF7.4: mailer, messenger, form, validator, doctrine orm ^3.0."
+      "notes": "composer.json creato con tutte le dipendenze SF7.4: mailer, messenger, form, validator, doctrine orm ^3.0. Namespace aggiornato a Ephp."
     },
     {
       "id": "US-007",
-      "title": "Create OiMailflowBundle main class",
+      "title": "Create EphpMailflowBundle main class",
       "description": "As a developer, I need to create the bundle main class.",
       "acceptanceCriteria": [
-        "src/OiMailflowBundle.php extends Symfony\\Component\\HttpKernel\\Bundle\\AbstractBundle",
-        "Class is in namespace Oi\\MailflowBundle",
+        "src/EphpMailflowBundle.php extends Symfony\\Component\\HttpKernel\\Bundle\\AbstractBundle",
+        "Class is in namespace Ephp\\MailflowBundle",
         "Uses PHP 8 attributes syntax",
         "Typecheck passes"
       ],
       "priority": 7,
       "passes": true,
-      "notes": "OiMailflowBundle.php creato con AbstractBundle (SF7 pattern moderno)."
+      "notes": "EphpMailflowBundle.php creato con AbstractBundle (SF7 pattern moderno)."
     },
     {
       "id": "US-008",
       "title": "Create DependencyInjection classes",
       "description": "As a developer, I need to create the bundle extension and configuration.",
       "acceptanceCriteria": [
-        "src/DependencyInjection/OiMailflowExtension.php exists",
+        "src/DependencyInjection/EphpMailflowExtension.php exists",
         "src/DependencyInjection/Configuration.php exists",
         "Extension loads config/services.yaml",
         "Uses modern SF7 service configuration patterns",
@@ -120,7 +120,7 @@
       ],
       "priority": 8,
       "passes": true,
-      "notes": "OiMailflowExtension.php e Configuration.php creati con parametri: default_batch_size, default_send_interval, smtp_connection_timeout, max_retry_count."
+      "notes": "EphpMailflowExtension.php e Configuration.php creati con parametri: default_batch_size, default_send_interval, smtp_connection_timeout, max_retry_count. Namespace Ephp."
     },
     {
       "id": "US-009",
@@ -134,7 +134,7 @@
       ],
       "priority": 9,
       "passes": true,
-      "notes": "config/services.yaml creato con autowire/autoconfigure, esclude Entity e DependencyInjection."
+      "notes": "config/services.yaml creato con autowire/autoconfigure, namespace Ephp\\MailflowBundle, esclude Entity e DependencyInjection."
     },
     {
       "id": "US-010",
@@ -143,19 +143,19 @@
       "acceptanceCriteria": [
         "server-sf7/composer.json has repositories array",
         "Repository type is 'path' pointing to ../Bundles/MailflowBundle",
-        "oi/mailflow: @dev is in require section",
+        "ephp/mailflow: @dev is in require section",
         "Typecheck passes"
       ],
       "priority": 10,
       "passes": true,
-      "notes": "Repository path aggiunto come primo elemento dell'array repositories. oi/mailflow: @dev aggiunto in require."
+      "notes": "Repository path aggiunto come primo elemento dell'array repositories. ephp/mailflow: @dev aggiunto in require."
     },
     {
       "id": "US-011",
       "title": "Install and register MailflowBundle",
       "description": "As a developer, I need to install the bundle via composer and register it.",
       "acceptanceCriteria": [
-        "composer require oi/mailflow:@dev completes successfully",
+        "composer require ephp/mailflow:@dev completes successfully",
         "Bundle registered in config/bundles.php",
         "bin/console debug:container | grep mailflow shows bundle services",
         "No deprecation warnings for the bundle",
@@ -167,17 +167,17 @@
     },
     {
       "id": "US-012",
-      "title": "Create oi_mailflow.yaml configuration",
+      "title": "Create ephp_mailflow.yaml configuration",
       "description": "As a developer, I need to create the bundle configuration file.",
       "acceptanceCriteria": [
-        "config/packages/oi_mailflow.yaml exists",
+        "config/packages/ephp_mailflow.yaml exists",
         "Basic configuration structure in place",
-        "bin/console config:dump oi_mailflow works",
+        "bin/console config:dump ephp_mailflow works",
         "Typecheck passes (bin/console lint:container)"
       ],
       "priority": 12,
       "passes": true,
-      "notes": "config/packages/oi_mailflow.yaml creato con tutti e quattro i parametri: default_batch_size=50, default_send_interval=30, smtp_connection_timeout=10, max_retry_count=3. Verifica bin/console da fare dopo installazione bundle (US-011)."
+      "notes": "config/packages/ephp_mailflow.yaml creato con tutti e quattro i parametri: default_batch_size=50, default_send_interval=30, smtp_connection_timeout=10, max_retry_count=3. Verifica bin/console da fare dopo installazione bundle (US-011)."
     },
     {
       "id": "US-013",

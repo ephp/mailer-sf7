@@ -24,5 +24,7 @@ return [
     Oneup\UploaderBundle\OneupUploaderBundle::class => ['all' => true],
     FOS\JsRoutingBundle\FOSJsRoutingBundle::class => ['all' => true],
     Oi\FileBundle\OiFileBundle::class => ['all' => true],
+    Ephp\MailflowBundle\EphpMailflowBundle::class => ['all' => true],
     Gesdinet\JWTRefreshTokenBundle\GesdinetJWTRefreshTokenBundle::class => ['all' => true],
+    Oi\TagBundle\OiTagBundle::class => ['all' => true],
 ];

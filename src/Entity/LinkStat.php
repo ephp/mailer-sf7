@@ -4,7 +4,7 @@ namespace App\Entity;
 
 use App\Repository\LinkStatRepository;
 use Doctrine\ORM\Mapping as ORM;
-use Oi\MailflowBundle\Entity\BaseLinkStat;
+use Ephp\MailflowBundle\Entity\BaseLinkStat;
 use Symfony\Component\Serializer\Attribute\Ignore;
 
 #[ORM\Table(name: 'link_stat')]
