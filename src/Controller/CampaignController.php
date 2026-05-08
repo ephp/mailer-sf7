@@ -16,6 +16,7 @@ use App\Repository\LinkStatRepository;
 use App\Repository\OpenStatRepository;
 use App\Repository\UnsubscribeRequestRepository;
 use App\Service\AccountMailerFactory;
+use App\Service\EmailTemplateRenderer;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use Knp\Component\Pager\PaginatorInterface;
@@ -110,6 +111,37 @@ class CampaignController extends AbstractController
         }
 
         return new Response($serializer->serialize(new ItemDetail($campaign), 'json', ['groups' => ['campaign:read']]));
+    }
+
+    #[Route('/campaigns/{id}/preview', name: 'campaign_preview', methods: ['GET'])]
+    #[IsGranted('ROLE_USER')]
+    public function preview(
+        int $id,
+        CampaignRepository $campaignRepository,
+        EmailTemplateRenderer $renderer,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $campaign = $campaignRepository->findOneByIdAndAccount($id, $account);
+
+        if ($campaign === null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $rendered = $renderer->render($campaign);
+
+        $detail = new ItemDetail(['html' => $rendered->html, 'plain_text' => $rendered->plainText]);
+        return new Response($serializer->serialize($detail, 'json'), Response::HTTP_OK);
     }
 
     #[Route('/campaigns', name: 'campaign_create', methods: ['POST'])]
