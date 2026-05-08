@@ -56,6 +56,53 @@ class StatisticsService
         ];
     }
 
+    /**
+     * @return list<array{timestamp: string, value: int}>
+     */
+    public function getCampaignTimeline(Campaign $campaign, string $metric = 'opens', int $hours = 72, bool $cumulative = false): array
+    {
+        $sentAt = $campaign->getSentAt();
+        if ($sentAt === null) {
+            return [];
+        }
+
+        $fromBase = \DateTimeImmutable::createFromInterface($sentAt);
+        $from = $fromBase->setTime((int) $fromBase->format('G'), 0, 0);
+        $to = $from->modify("+{$hours} hours");
+
+        $rawData = $metric === 'clicks'
+            ? $this->linkStatRepository->timelineByCampaign($campaign, $from, $to)
+            : $this->openStatRepository->timelineByCampaign($campaign, $from, $to);
+
+        $bucketMap = [];
+        foreach ($rawData as $row) {
+            $bucketKey = (new \DateTimeImmutable($row['bucket']))->format('Y-m-d H:00');
+            $bucketMap[$bucketKey] = (int) $row['cnt'];
+        }
+
+        $timeline = [];
+        $current = $from;
+        while ($current < $to) {
+            $bucketKey = $current->format('Y-m-d H:00');
+            $timeline[] = [
+                'timestamp' => $current->format(\DateTimeInterface::ATOM),
+                'value' => $bucketMap[$bucketKey] ?? 0,
+            ];
+            $current = $current->modify('+1 hour');
+        }
+
+        if ($cumulative) {
+            $running = 0;
+            foreach ($timeline as &$point) {
+                $running += $point['value'];
+                $point['value'] = $running;
+            }
+            unset($point);
+        }
+
+        return $timeline;
+    }
+
     public function getAccountStats(Account $account): array
     {
         $totalSent = $this->campaignEmailRepository->countByAccountAndStatus($account, CampaignEmailStatus::Sent);

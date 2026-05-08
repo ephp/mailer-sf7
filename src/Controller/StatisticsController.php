@@ -8,6 +8,7 @@ use App\Service\StatisticsService;
 use Doctrine\Persistence\ManagerRegistry;
 use Oi\ApiBundle\Model\ItemDetail;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
@@ -46,6 +47,40 @@ class StatisticsController extends AbstractController
 
         $stats = $this->statisticsService->getCampaignStats($campaign);
         return new Response($serializer->serialize(new ItemDetail($stats), 'json'));
+    }
+
+    #[Route('/campaigns/{id}/timeline', name: 'statistics_campaign_timeline', methods: ['GET'])]
+    #[IsGranted('ROLE_USER')]
+    public function campaignTimeline(
+        int $id,
+        Request $request,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $campaign = $this->campaignRepository->findOneByIdAndAccount($id, $account);
+        if ($campaign === null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $metric = $request->query->getString('metric', 'opens');
+        if (!in_array($metric, ['opens', 'clicks'], true)) {
+            $metric = 'opens';
+        }
+        $hours = max(1, min(720, $request->query->getInt('hours', 72)));
+        $cumulative = $request->query->getBoolean('cumulative', false);
+
+        $timeline = $this->statisticsService->getCampaignTimeline($campaign, $metric, $hours, $cumulative);
+        return new Response($serializer->serialize(new ItemDetail($timeline), 'json'));
     }
 
     #[Route('/statistics', name: 'statistics_account', methods: ['GET'])]

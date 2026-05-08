@@ -66,4 +66,31 @@ class LinkStatRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleScalarResult();
     }
+
+    /**
+     * @return list<array{bucket: string, cnt: string}>
+     */
+    public function timelineByCampaign(Campaign $campaign, \DateTimeInterface $from, \DateTimeInterface $to): array
+    {
+        $conn = $this->getEntityManager()->getConnection();
+        $result = $conn->executeQuery(
+            "SELECT DATE_TRUNC('hour', ls.first_clicked_at) AS bucket, COUNT(ls.id) AS cnt
+             FROM link_stat ls
+             INNER JOIN campaign_email ce ON ls.campaign_email_id = ce.id
+             WHERE ce.campaign_id = :campaign_id
+               AND ls.first_clicked_at IS NOT NULL
+               AND ls.first_clicked_at >= :from
+               AND ls.first_clicked_at < :to
+             GROUP BY bucket
+             ORDER BY bucket ASC",
+            [
+                'campaign_id' => $campaign->getId(),
+                'from' => $from->format('Y-m-d H:i:s'),
+                'to' => $to->format('Y-m-d H:i:s'),
+            ]
+        );
+
+        /** @var list<array{bucket: string, cnt: string}> */
+        return $result->fetchAllAssociative();
+    }
 }

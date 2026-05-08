@@ -67,4 +67,31 @@ class OpenStatRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleScalarResult();
     }
+
+    /**
+     * @return list<array{bucket: string, cnt: string}>
+     */
+    public function timelineByCampaign(Campaign $campaign, \DateTimeInterface $from, \DateTimeInterface $to): array
+    {
+        $conn = $this->getEntityManager()->getConnection();
+        $result = $conn->executeQuery(
+            "SELECT DATE_TRUNC('hour', os.first_opened_at) AS bucket, COUNT(os.id) AS cnt
+             FROM open_stat os
+             INNER JOIN campaign_email ce ON os.campaign_email_id = ce.id
+             WHERE ce.campaign_id = :campaign_id
+               AND os.first_opened_at IS NOT NULL
+               AND os.first_opened_at >= :from
+               AND os.first_opened_at < :to
+             GROUP BY bucket
+             ORDER BY bucket ASC",
+            [
+                'campaign_id' => $campaign->getId(),
+                'from' => $from->format('Y-m-d H:i:s'),
+                'to' => $to->format('Y-m-d H:i:s'),
+            ]
+        );
+
+        /** @var list<array{bucket: string, cnt: string}> */
+        return $result->fetchAllAssociative();
+    }
 }
