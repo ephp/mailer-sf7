@@ -627,6 +627,57 @@ class CampaignController extends AbstractController
         return new Response($serializer->serialize($detail, 'json'), Response::HTTP_ACCEPTED);
     }
 
+    #[Route('/campaigns/{id}/sending-status', name: 'campaign_sending_status', methods: ['GET'])]
+    #[IsGranted('ROLE_USER')]
+    public function sendingStatus(
+        int $id,
+        CampaignRepository $campaignRepository,
+        CampaignEmailRepository $campaignEmailRepository,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $campaign = $campaignRepository->findOneByIdAndAccount($id, $account);
+
+        if ($campaign === null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $counts = $campaignEmailRepository->countsByStatus($campaign);
+        $total = $campaignEmailRepository->countByCampaign($campaign);
+
+        $pending = $counts['pending'] ?? 0;
+        $sending = $counts['sending'] ?? 0;
+        $sent = $counts['sent'] ?? 0;
+        $failed = $counts['failed'] ?? 0;
+        $bounced = $counts['bounced'] ?? 0;
+
+        $percentComplete = ($total > 0 && ($pending + $sending) === 0) ? 100 : (
+            $total > 0 ? (int) round(($sent + $failed + $bounced) / $total * 100) : 0
+        );
+
+        $detail = new ItemDetail([
+            'total' => $total,
+            'pending' => $pending,
+            'sending' => $sending,
+            'sent' => $sent,
+            'failed' => $failed,
+            'bounced' => $bounced,
+            'percent_complete' => $percentComplete,
+        ]);
+
+        return new Response($serializer->serialize($detail, 'json'), Response::HTTP_OK);
+    }
+
     #[Route('/campaigns/{id}/stats', name: 'campaign_stats', methods: ['GET'])]
     #[IsGranted('ROLE_USER')]
     public function stats(
