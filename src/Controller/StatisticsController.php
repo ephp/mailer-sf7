@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Entity\Contact;
 use App\Entity\MailList;
 use App\Repository\CampaignEmailRepository;
 use App\Repository\CampaignRepository;
@@ -228,6 +229,33 @@ class StatisticsController extends AbstractController
         $response->headers->set('Content-Disposition', "attachment; filename=campaign-{$id}-recipients.csv");
 
         return $response;
+    }
+
+    #[Route('/contacts/{id}/history', name: 'statistics_contact_history', methods: ['GET'])]
+    #[IsGranted('ROLE_USER')]
+    public function contactHistory(
+        int $id,
+        ManagerRegistry $doctrine,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $contact = $doctrine->getManager()->find(Contact::class, $id);
+        if ($contact === null || $contact->getMailList()?->getAccountId() !== $account->getId()) {
+            $detail = new ItemDetail(null, $translator->trans('contact.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $history = $this->statisticsService->getContactHistory($contact);
+        return new Response($serializer->serialize(new ItemDetail($history), 'json'));
     }
 
     #[Route('/statistics', name: 'statistics_account', methods: ['GET'])]

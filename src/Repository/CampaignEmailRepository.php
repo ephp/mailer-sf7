@@ -163,6 +163,23 @@ class CampaignEmailRepository extends ServiceEntityRepository
         return $result->fetchAllAssociative();
     }
 
+    /**
+     * @return CampaignEmail[]
+     */
+    public function findByContactOrderedBySentAt(\App\Entity\Contact $contact): array
+    {
+        /** @var CampaignEmail[] */
+        return $this->createQueryBuilder('ce')
+            ->innerJoin('ce.campaign', 'c')
+            ->addSelect('c')
+            ->where('ce.contact = :contact')
+            ->setParameter('contact', $contact)
+            ->orderBy('c.sentAt', 'DESC')
+            ->addOrderBy('ce.id', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
+
     /** @return string[] */
     public function findExistingEmailsByCampaign(Campaign $campaign): array
     {

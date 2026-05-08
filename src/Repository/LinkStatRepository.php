@@ -95,6 +95,38 @@ class LinkStatRepository extends ServiceEntityRepository
     }
 
     /**
+     * @param int[] $ids
+     * @return array<int, list<string>>
+     */
+    public function urlsByCampaignEmailIds(array $ids): array
+    {
+        if (empty($ids)) {
+            return [];
+        }
+
+        $inList = implode(',', array_map('intval', $ids));
+        $conn = $this->getEntityManager()->getConnection();
+        $result = $conn->executeQuery(
+            "SELECT campaign_email_id, url
+             FROM link_stat
+             WHERE campaign_email_id IN ($inList)
+               AND count > 0
+             ORDER BY campaign_email_id, id"
+        );
+
+        $data = [];
+        foreach ($result->fetchAllAssociative() as $row) {
+            $ceId = (int) $row['campaign_email_id'];
+            if (!isset($data[$ceId])) {
+                $data[$ceId] = [];
+            }
+            $data[$ceId][] = $row['url'];
+        }
+
+        return $data;
+    }
+
+    /**
      * @return list<array{original_url: string, unique_clicks: string, total_clicks: string}>
      */
     public function linksByCampaign(Campaign $campaign): array

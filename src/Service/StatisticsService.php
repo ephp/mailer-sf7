@@ -5,6 +5,7 @@ namespace App\Service;
 use App\Entity\Account;
 use App\Entity\Campaign;
 use App\Entity\CampaignEmail;
+use App\Entity\Contact;
 use App\Entity\MailList;
 use App\Repository\CampaignEmailRepository;
 use App\Repository\CampaignRepository;
@@ -235,6 +236,77 @@ class StatisticsService
         }
 
         return $result;
+    }
+
+    public function getContactHistory(Contact $contact): array
+    {
+        $campaignEmails = $this->campaignEmailRepository->findByContactOrderedBySentAt($contact);
+
+        if (empty($campaignEmails)) {
+            return [
+                'campaigns' => [],
+                'kpi' => [
+                    'personal_open_rate' => 0.0,
+                    'personal_click_rate' => 0.0,
+                    'engagement_score' => 0.0,
+                ],
+            ];
+        }
+
+        $ids = array_map(fn(CampaignEmail $ce) => (int) $ce->getId(), $campaignEmails);
+
+        $openStats = $this->openStatRepository->findByCampaignEmailIds($ids);
+        $clickCounts = $this->linkStatRepository->sumClicksByCampaignEmailIds($ids);
+        $unsubscribedSet = $this->unsubscribeRepository->findSetByCampaignEmailIds($ids);
+        $urlsByEmail = $this->linkStatRepository->urlsByCampaignEmailIds($ids);
+
+        $campaigns = [];
+        $receivedCount = 0;
+        $openedCount = 0;
+        $clickedCount = 0;
+
+        foreach ($campaignEmails as $ce) {
+            $ceId = (int) $ce->getId();
+            $campaign = $ce->getCampaign();
+            $openStat = $openStats[$ceId] ?? null;
+            $clickCount = $clickCounts[$ceId] ?? 0;
+            $unsubscribed = isset($unsubscribedSet[$ceId]);
+            $linksClicked = $urlsByEmail[$ceId] ?? [];
+
+            $receivedCount++;
+            if ($openStat !== null) {
+                $openedCount++;
+            }
+            if ($clickCount > 0) {
+                $clickedCount++;
+            }
+
+            $campaigns[] = [
+                'campaign_id' => $campaign?->getId(),
+                'campaign_name' => $campaign?->getName(),
+                'sent_at' => $campaign?->getSentAt()?->format(\DateTimeInterface::ATOM),
+                'opened' => $openStat !== null,
+                'opened_at' => $openStat?->getFirstOpenedAt()?->format(\DateTimeInterface::ATOM),
+                'open_count' => $openStat?->getCount() ?? 0,
+                'clicked' => $clickCount > 0,
+                'click_count' => $clickCount,
+                'links_clicked' => $linksClicked,
+                'unsubscribed' => $unsubscribed,
+            ];
+        }
+
+        $personalOpenRate = $receivedCount > 0 ? round($openedCount / $receivedCount * 100, 2) : 0.0;
+        $personalClickRate = $receivedCount > 0 ? round($clickedCount / $receivedCount * 100, 2) : 0.0;
+        $engagementScore = min(100.0, round($personalOpenRate * 0.4 + $personalClickRate * 0.6, 2));
+
+        return [
+            'campaigns' => $campaigns,
+            'kpi' => [
+                'personal_open_rate' => $personalOpenRate,
+                'personal_click_rate' => $personalClickRate,
+                'engagement_score' => $engagementScore,
+            ],
+        ];
     }
 
     public function getMailListStats(MailList $mailList): array
