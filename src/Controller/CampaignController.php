@@ -732,20 +732,54 @@ class CampaignController extends AbstractController
     #[IsGranted('ROLE_USER')]
     public function saveAsTemplate(
         int $id,
+        Request $request,
         ManagerRegistry $doctrine,
         SerializerInterface $serializer,
         TranslatorInterface $translator,
     ): Response {
-        $campaign = $this->findCampaignForUser($id, $doctrine, $translator, $serializer);
-        if ($campaign instanceof Response) {
-            return $campaign;
+        $source = $this->findCampaignForUser($id, $doctrine, $translator, $serializer);
+        if ($source instanceof Response) {
+            return $source;
         }
 
-        $campaign->setTemplate(true);
-        $doctrine->getManager()->flush();
+        $data = json_decode($request->getContent(), true) ?? [];
+        $name = trim((string) ($data['name'] ?? ''));
 
-        $detail = new ItemDetail($campaign, $translator->trans('campaign.success.saved_as_template'));
-        return new Response($serializer->serialize($detail, 'json'));
+        if ($name === '') {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.name_required'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        $template = new Campaign();
+        $template->setAccount($account);
+        $template->setName($name);
+        $template->setEmailSubject($source->getEmailSubject());
+        $template->setBody($source->getBody());
+        $template->setStructure($source->getStructure());
+        $template->setComposition($source->getComposition());
+        $template->setFilter($source->getFilter());
+        $template->setTemplate(true);
+        $template->setDraft(false);
+        $template->setStatus('draft');
+        $template->setClonedFrom($source);
+
+        $description = trim((string) ($data['description'] ?? ''));
+        $template->setSnippet($description !== '' ? $description : $source->getSnippet());
+
+        $em = $doctrine->getManager();
+        foreach ($source->getMailLists() as $mailList) {
+            $template->getMailLists()->add($mailList);
+        }
+
+        $em->persist($template);
+        $em->flush();
+
+        $detail = new ItemDetail($template, $translator->trans('campaign.success.saved_as_template'));
+        return new Response($serializer->serialize($detail, 'json', ['groups' => ['campaign:read']]), Response::HTTP_CREATED);
     }
 
     #[Route('/campaigns/{id}/delete', name: 'campaign_delete', methods: ['POST'])]

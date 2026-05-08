@@ -1,0 +1,19 @@
+campaign:
+  error:
+    name_required: "Name is required."
+  success:
+    saved_as_template: "Campaign saved as template."
+  template:
+    preset:
+      newsletter:
+        name: "Newsletter"
+        description: "Classic newsletter layout with header, content and footer."
+      promo:
+        name: "Promotion"
+        description: "Template with hero image and CTA button for offers and promotions."
+      institutional:
+        name: "Institutional"
+        description: "Elegant serif typography design for formal communications."
+      plaintext:
+        name: "Plain text"
+        description: "Personal-style email without graphics, ideal for direct messages."
