@@ -21,9 +21,42 @@ class CampaignEmailRepository extends ServiceEntityRepository
     }
 
     /** @return CampaignEmail[] */
-    public function findByCampaignAndStatus(Campaign $campaign, CampaignEmailStatus $status): array
+    public function findByCampaignAndStatus(Campaign $campaign, CampaignEmailStatus $status, ?int $limit = null): array
     {
-        return $this->findBy(['campaign' => $campaign, 'status' => $status]);
+        return $this->findBy(['campaign' => $campaign, 'status' => $status], null, $limit);
+    }
+
+    /** @return array<string, int> */
+    public function countsByStatus(Campaign $campaign): array
+    {
+        $rows = $this->createQueryBuilder('ce')
+            ->select('ce.status, COUNT(ce.id) as cnt')
+            ->where('ce.campaign = :campaign')
+            ->setParameter('campaign', $campaign)
+            ->groupBy('ce.status')
+            ->getQuery()
+            ->getResult();
+
+        $counts = array_fill_keys(
+            array_map(fn(CampaignEmailStatus $s) => $s->value, CampaignEmailStatus::cases()),
+            0
+        );
+        foreach ($rows as $row) {
+            $counts[$row['status']->value] = (int) $row['cnt'];
+        }
+        return $counts;
+    }
+
+    public function hasUnfinished(Campaign $campaign): bool
+    {
+        return (int) $this->createQueryBuilder('ce')
+            ->select('COUNT(ce.id)')
+            ->where('ce.campaign = :campaign')
+            ->andWhere('ce.status IN (:statuses)')
+            ->setParameter('campaign', $campaign)
+            ->setParameter('statuses', [CampaignEmailStatus::Pending, CampaignEmailStatus::Sending])
+            ->getQuery()
+            ->getSingleScalarResult() > 0;
     }
 
     public function countByCampaign(Campaign $campaign): int
