@@ -56,4 +56,15 @@ class OpenStatRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleScalarResult();
     }
+
+    public function totalOpensByCampaign(Campaign $campaign): int
+    {
+        return (int) $this->createQueryBuilder('os')
+            ->select('SUM(os.count)')
+            ->innerJoin('os.campaignEmail', 'ce')
+            ->where('ce.campaign = :campaign')
+            ->setParameter('campaign', $campaign)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
 }

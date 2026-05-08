@@ -3,6 +3,7 @@
 namespace App\Service;
 
 use App\Entity\Account;
+use App\Entity\Campaign;
 use App\Entity\MailList;
 use App\Repository\CampaignEmailRepository;
 use App\Repository\CampaignRepository;
@@ -24,6 +25,36 @@ class StatisticsService
         private readonly MailListRepository $mailListRepository,
         private readonly CampaignRepository $campaignRepository,
     ) {}
+
+    public function getCampaignStats(Campaign $campaign): array
+    {
+        $sent = $this->campaignEmailRepository->countByCampaignAndStatus($campaign, CampaignEmailStatus::Sent);
+        $failed = $this->campaignEmailRepository->countByCampaignAndStatus($campaign, CampaignEmailStatus::Failed);
+        $bounced = $this->campaignEmailRepository->countByCampaignAndStatus($campaign, CampaignEmailStatus::Bounced);
+        $total = $this->campaignEmailRepository->countByCampaign($campaign);
+
+        $uniqueOpens = $this->openStatRepository->countUniqueByCampaign($campaign);
+        $totalOpens = $this->openStatRepository->totalOpensByCampaign($campaign);
+        $uniqueClicks = $this->linkStatRepository->countUniqueByCampaign($campaign);
+        $totalClicks = $this->linkStatRepository->totalClicksByCampaign($campaign);
+        $unsubscribes = $this->unsubscribeRepository->countByCampaign($campaign);
+
+        return [
+            'total' => $total,
+            'sent' => $sent,
+            'failed' => $failed,
+            'bounced' => $bounced,
+            'unique_opens' => $uniqueOpens,
+            'total_opens' => $totalOpens,
+            'unique_clicks' => $uniqueClicks,
+            'total_clicks' => $totalClicks,
+            'unsubscribes' => $unsubscribes,
+            'open_rate' => $sent > 0 ? round($uniqueOpens / $sent * 100, 2) : 0.0,
+            'click_rate' => $sent > 0 ? round($uniqueClicks / $sent * 100, 2) : 0.0,
+            'click_to_open_rate' => $uniqueOpens > 0 ? round($uniqueClicks / $uniqueOpens * 100, 2) : 0.0,
+            'unsubscribe_rate' => $sent > 0 ? round($unsubscribes / $sent * 100, 2) : 0.0,
+        ];
+    }
 
     public function getAccountStats(Account $account): array
     {

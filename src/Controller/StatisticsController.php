@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Entity\MailList;
+use App\Repository\CampaignRepository;
 use App\Service\StatisticsService;
 use Doctrine\Persistence\ManagerRegistry;
 use Oi\ApiBundle\Model\ItemDetail;
@@ -18,7 +19,34 @@ class StatisticsController extends AbstractController
 {
     public function __construct(
         private readonly StatisticsService $statisticsService,
+        private readonly CampaignRepository $campaignRepository,
     ) {}
+
+    #[Route('/campaigns/{id}/stats', name: 'statistics_campaign', methods: ['GET'])]
+    #[IsGranted('ROLE_USER')]
+    public function campaignStats(
+        int $id,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $campaign = $this->campaignRepository->findOneByIdAndAccount($id, $account);
+        if ($campaign === null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $stats = $this->statisticsService->getCampaignStats($campaign);
+        return new Response($serializer->serialize(new ItemDetail($stats), 'json'));
+    }
 
     #[Route('/statistics', name: 'statistics_account', methods: ['GET'])]
     #[IsGranted('ROLE_USER')]

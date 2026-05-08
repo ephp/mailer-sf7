@@ -55,4 +55,15 @@ class LinkStatRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleScalarResult();
     }
+
+    public function totalClicksByCampaign(Campaign $campaign): int
+    {
+        return (int) $this->createQueryBuilder('ls')
+            ->select('SUM(ls.count)')
+            ->innerJoin('ls.campaignEmail', 'ce')
+            ->where('ce.campaign = :campaign')
+            ->setParameter('campaign', $campaign)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
 }
