@@ -704,9 +704,14 @@ class CampaignController extends AbstractController
         $user = $this->getUser();
         $account = $user->getAccount();
 
+        $sourceName = $source->getName();
+        $copyName = $sourceName !== null && $sourceName !== ''
+            ? 'Copia di ' . $sourceName
+            : 'Copia senza titolo';
+
         $copy = new Campaign();
         $copy->setAccount($account);
-        $copy->setName($source->getName());
+        $copy->setName($copyName);
         $copy->setEmailSubject($source->getEmailSubject());
         $copy->setSnippet($source->getSnippet());
         $copy->setBody($source->getBody());
@@ -715,6 +720,8 @@ class CampaignController extends AbstractController
         $copy->setFilter($source->getFilter());
         $copy->setDraft(true);
         $copy->setTemplate(false);
+        $copy->setStatus('draft');
+        $copy->setClonedFrom($source);
 
         $em = $doctrine->getManager();
         foreach ($source->getMailLists() as $mailList) {
@@ -725,7 +732,7 @@ class CampaignController extends AbstractController
         $em->flush();
 
         $detail = new ItemDetail($copy, $translator->trans('campaign.success.duplicated'));
-        return new Response($serializer->serialize($detail, 'json'), Response::HTTP_CREATED);
+        return new Response($serializer->serialize($detail, 'json', ['groups' => ['campaign:read']]), Response::HTTP_CREATED);
     }
 
     #[Route('/campaigns/{id}/save-as-template', name: 'campaign_save_as_template', methods: ['POST'])]

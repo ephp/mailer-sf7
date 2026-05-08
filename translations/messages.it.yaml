@@ -3,6 +3,7 @@ campaign:
     name_required: "Il nome è obbligatorio."
   success:
     saved_as_template: "Campagna salvata come template."
+    duplicated: "Campagna duplicata con successo."
   template:
     preset:
       newsletter:
