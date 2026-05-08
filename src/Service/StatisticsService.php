@@ -197,6 +197,46 @@ class StatisticsService
         ];
     }
 
+    /**
+     * @return list<array{month: string, emails_sent: int, unique_opens: int, unique_clicks: int, average_open_rate: float, average_click_rate: float}>
+     */
+    public function getAccountMonthly(Account $account, int $months = 12): array
+    {
+        $now = new \DateTimeImmutable();
+        $from = $now->modify("-{$months} months")->modify('first day of this month')->setTime(0, 0, 0);
+
+        $rows = $this->campaignEmailRepository->monthlyStatsByAccount($account, $from);
+
+        $indexed = [];
+        foreach ($rows as $row) {
+            $indexed[$row['month']] = [
+                'emails_sent' => (int) $row['emails_sent'],
+                'unique_opens' => (int) $row['unique_opens'],
+                'unique_clicks' => (int) $row['unique_clicks'],
+            ];
+        }
+
+        $result = [];
+        $cursor = $from;
+        for ($i = 0; $i < $months; $i++) {
+            $key = $cursor->format('Y-m');
+            $sent = $indexed[$key]['emails_sent'] ?? 0;
+            $opens = $indexed[$key]['unique_opens'] ?? 0;
+            $clicks = $indexed[$key]['unique_clicks'] ?? 0;
+            $result[] = [
+                'month' => $key,
+                'emails_sent' => $sent,
+                'unique_opens' => $opens,
+                'unique_clicks' => $clicks,
+                'average_open_rate' => $sent > 0 ? round($opens / $sent * 100, 2) : 0.0,
+                'average_click_rate' => $sent > 0 ? round($clicks / $sent * 100, 2) : 0.0,
+            ];
+            $cursor = $cursor->modify('+1 month');
+        }
+
+        return $result;
+    }
+
     public function getMailListStats(MailList $mailList): array
     {
         $totalSent = $this->campaignEmailRepository->countByMailListAndStatus($mailList, CampaignEmailStatus::Sent);

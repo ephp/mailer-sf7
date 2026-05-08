@@ -124,6 +124,45 @@ class CampaignEmailRepository extends ServiceEntityRepository
         };
     }
 
+    /**
+     * Returns monthly aggregated stats for all sent campaign emails belonging to an account,
+     * starting from $from (inclusive). Rows are ordered by month ASC.
+     *
+     * @return list<array{month: string, emails_sent: string, unique_opens: string, unique_clicks: string}>
+     */
+    public function monthlyStatsByAccount(Account $account, \DateTimeInterface $from): array
+    {
+        $conn = $this->getEntityManager()->getConnection();
+        $result = $conn->executeQuery(
+            "SELECT
+                TO_CHAR(DATE_TRUNC('month', c.sent_at), 'YYYY-MM') AS month,
+                COUNT(DISTINCT ce.id) AS emails_sent,
+                COUNT(DISTINCT ce.id) FILTER (WHERE os.campaign_email_id IS NOT NULL) AS unique_opens,
+                COUNT(DISTINCT ce.id) FILTER (WHERE lsc.campaign_email_id IS NOT NULL) AS unique_clicks
+             FROM campaign_email ce
+             INNER JOIN campaign c ON c.id = ce.campaign_id
+             LEFT JOIN open_stat os ON os.campaign_email_id = ce.id
+             LEFT JOIN (
+                 SELECT DISTINCT campaign_email_id
+                 FROM link_stat
+                 WHERE count > 0
+             ) lsc ON lsc.campaign_email_id = ce.id
+             WHERE c.account_id = :account_id
+               AND ce.status = 'sent'
+               AND c.sent_at IS NOT NULL
+               AND c.sent_at >= :from
+             GROUP BY DATE_TRUNC('month', c.sent_at)
+             ORDER BY month ASC",
+            [
+                'account_id' => $account->getId(),
+                'from' => $from->format('Y-m-d H:i:s'),
+            ]
+        );
+
+        /** @var list<array{month: string, emails_sent: string, unique_opens: string, unique_clicks: string}> */
+        return $result->fetchAllAssociative();
+    }
+
     /** @return string[] */
     public function findExistingEmailsByCampaign(Campaign $campaign): array
     {

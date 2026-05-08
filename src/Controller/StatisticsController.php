@@ -249,6 +249,28 @@ class StatisticsController extends AbstractController
         return new Response($serializer->serialize(new ItemDetail($stats), 'json'));
     }
 
+    #[Route('/statistics/monthly', name: 'statistics_monthly', methods: ['GET'])]
+    #[IsGranted('ROLE_USER')]
+    public function accountMonthly(
+        Request $request,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $months = max(1, min(60, $request->query->getInt('months', 12)));
+
+        $monthly = $this->statisticsService->getAccountMonthly($account, $months);
+        return new Response($serializer->serialize(new ItemDetail($monthly), 'json'));
+    }
+
     #[Route('/statistics/lists/{id}', name: 'statistics_list', methods: ['GET'])]
     #[IsGranted('ROLE_USER')]
     public function listStats(
