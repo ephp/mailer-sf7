@@ -1,0 +1,18 @@
+{% extends 'unsubscribe/_base.html.twig' %}
+
+{% block title %}Conferma disiscrizione{% endblock %}
+
+{% block content %}
+<h1>Conferma disiscrizione</h1>
+<p>
+  {% if unsubscribeText %}
+    {{ unsubscribeText }}
+  {% else %}
+    Stai per disiscriverti da <strong>{{ listName }}</strong>.<br>Non riceverai più email da questa lista.
+  {% endif %}
+</p>
+<form method="POST" action="/unsubscribe/{{ uuid }}">
+  <button type="submit" class="btn-primary">Conferma disiscrizione</button>
+</form>
+<a href="javascript:history.back()" class="link-muted">Annulla</a>
+{% endblock %}
