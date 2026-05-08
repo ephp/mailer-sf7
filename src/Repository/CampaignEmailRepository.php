@@ -93,4 +93,17 @@ class CampaignEmailRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleScalarResult();
     }
+
+    /** @return string[] */
+    public function findExistingEmailsByCampaign(Campaign $campaign): array
+    {
+        $rows = $this->createQueryBuilder('ce')
+            ->select('ce.email')
+            ->where('ce.campaign = :campaign')
+            ->setParameter('campaign', $campaign)
+            ->getQuery()
+            ->getScalarResult();
+
+        return array_column($rows, 'email');
+    }
 }
