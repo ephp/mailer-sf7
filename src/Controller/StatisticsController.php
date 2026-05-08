@@ -83,6 +83,32 @@ class StatisticsController extends AbstractController
         return new Response($serializer->serialize(new ItemDetail($timeline), 'json'));
     }
 
+    #[Route('/campaigns/{id}/links', name: 'statistics_campaign_links', methods: ['GET'])]
+    #[IsGranted('ROLE_USER')]
+    public function campaignLinks(
+        int $id,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $campaign = $this->campaignRepository->findOneByIdAndAccount($id, $account);
+        if ($campaign === null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $links = $this->statisticsService->getCampaignLinks($campaign);
+        return new Response($serializer->serialize(new ItemDetail($links), 'json'));
+    }
+
     #[Route('/statistics', name: 'statistics_account', methods: ['GET'])]
     #[IsGranted('ROLE_USER')]
     public function accountStats(

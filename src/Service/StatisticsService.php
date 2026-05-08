@@ -103,6 +103,28 @@ class StatisticsService
         return $timeline;
     }
 
+    /**
+     * @return list<array{original_url: string, unique_clicks: int, total_clicks: int, click_rate: float}>
+     */
+    public function getCampaignLinks(Campaign $campaign): array
+    {
+        $sent = $this->campaignEmailRepository->countByCampaignAndStatus($campaign, CampaignEmailStatus::Sent);
+        $rows = $this->linkStatRepository->linksByCampaign($campaign);
+
+        $links = [];
+        foreach ($rows as $row) {
+            $uniqueClicks = (int) $row['unique_clicks'];
+            $links[] = [
+                'original_url' => $row['original_url'],
+                'unique_clicks' => $uniqueClicks,
+                'total_clicks' => (int) $row['total_clicks'],
+                'click_rate' => $sent > 0 ? round($uniqueClicks / $sent * 100, 2) : 0.0,
+            ];
+        }
+
+        return $links;
+    }
+
     public function getAccountStats(Account $account): array
     {
         $totalSent = $this->campaignEmailRepository->countByAccountAndStatus($account, CampaignEmailStatus::Sent);

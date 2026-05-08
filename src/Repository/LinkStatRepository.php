@@ -68,6 +68,28 @@ class LinkStatRepository extends ServiceEntityRepository
     }
 
     /**
+     * @return list<array{original_url: string, unique_clicks: string, total_clicks: string}>
+     */
+    public function linksByCampaign(Campaign $campaign): array
+    {
+        $conn = $this->getEntityManager()->getConnection();
+        $result = $conn->executeQuery(
+            'SELECT ls.url AS original_url,
+                    COUNT(DISTINCT ls.campaign_email_id) AS unique_clicks,
+                    SUM(ls.count) AS total_clicks
+             FROM link_stat ls
+             INNER JOIN campaign_email ce ON ls.campaign_email_id = ce.id
+             WHERE ce.campaign_id = :campaign_id
+             GROUP BY ls.url
+             ORDER BY total_clicks DESC',
+            ['campaign_id' => $campaign->getId()]
+        );
+
+        /** @var list<array{original_url: string, unique_clicks: string, total_clicks: string}> */
+        return $result->fetchAllAssociative();
+    }
+
+    /**
      * @return list<array{bucket: string, cnt: string}>
      */
     public function timelineByCampaign(Campaign $campaign, \DateTimeInterface $from, \DateTimeInterface $to): array
