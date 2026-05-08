@@ -77,7 +77,7 @@ class TrackingController extends AbstractController
         EntityManagerInterface $em,
         UnsubscribeRequestRepository $unsubscribeRepository,
     ): Response {
-        $campaignEmail = $em->getRepository(CampaignEmail::class)->findOneBy(['trackingOpenId' => $uuid]);
+        $campaignEmail = $em->getRepository(CampaignEmail::class)->findOneBy(['unsubscribeToken' => $uuid]);
 
         $alreadyDone = false;
 
