@@ -117,6 +117,11 @@ class Contact
         return $this;
     }
 
+    public function incrementBounceCount(): void
+    {
+        ++$this->bounceCount;
+    }
+
     #[Ignore]
     public function getMailList(): ?MailList
     {

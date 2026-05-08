@@ -35,6 +35,10 @@ class SendCampaignEmailMessageHandler
             return;
         }
 
+        // pending → sending at pickup
+        $campaignEmail->setStatus(CampaignEmailStatus::Sending);
+        $this->em->flush();
+
         $campaign = $campaignEmail->getCampaign();
         $contact = $campaignEmail->getContact();
         $account = $campaign->getAccount();
@@ -51,8 +55,10 @@ class SendCampaignEmailMessageHandler
         $body = $this->injectLinkTracking($body, $campaignEmail);
         $body = $this->injectOpenPixel($body, $campaignEmail);
 
+        $unsubUrl = null;
         if ($mailList?->isPermettiDisiscrizione() !== false) {
-            $body = $this->injectUnsubscribeLink($body, $campaignEmail);
+            $unsubUrl = $this->appUrl . '/unsubscribe/' . $campaignEmail->getUnsubscribeToken();
+            $body = $this->injectUnsubscribeLink($body, $unsubUrl);
         }
 
         // Persist LinkStat records before sending so click links resolve
@@ -67,6 +73,10 @@ class SendCampaignEmailMessageHandler
             ->subject($campaign->getEmailSubject())
             ->html($body);
 
+        if ($unsubUrl !== null) {
+            $email->getHeaders()->addTextHeader('List-Unsubscribe', '<' . $unsubUrl . '>');
+        }
+
         try {
             $mailer->send($email);
             $campaignEmail->setStatus(CampaignEmailStatus::Sent);
@@ -75,14 +85,21 @@ class SendCampaignEmailMessageHandler
         } catch (TransportExceptionInterface $e) {
             $campaignEmail->incrementRetryCount();
             $campaignEmail->setErrorMessage(substr($e->getMessage(), 0, 500));
-            $this->em->flush();
 
             if ($campaignEmail->getRetryCount() >= $this->maxRetryCount) {
-                $campaignEmail->setStatus(CampaignEmailStatus::Failed);
+                $campaignEmail->setStatus(CampaignEmailStatus::Bounced);
+                if ($contact !== null) {
+                    $contact->incrementBounceCount();
+                    if ($contact->getBounceCount() >= 3) {
+                        $contact->setIscritto(false);
+                    }
+                }
                 $this->em->flush();
                 return;
             }
 
+            $campaignEmail->setStatus(CampaignEmailStatus::Failed);
+            $this->em->flush();
             throw $e;
         }
     }
@@ -119,7 +136,7 @@ class SendCampaignEmailMessageHandler
     private function injectOpenPixel(string $body, CampaignEmail $campaignEmail): string
     {
         $pixelUrl = $this->appUrl . '/t/open/' . $campaignEmail->getTrackingOpenId();
-        $pixel = '<img src="' . $pixelUrl . '" width="1" height="1" alt="" style="display:none">';
+        $pixel = '<img src="' . $pixelUrl . '" width="1" height="1" style="display:none;" />';
 
         if (str_contains($body, '</body>')) {
             return str_replace('</body>', $pixel . '</body>', $body);
@@ -128,18 +145,9 @@ class SendCampaignEmailMessageHandler
         return $body . $pixel;
     }
 
-    private function injectUnsubscribeLink(string $body, CampaignEmail $campaignEmail): string
+    private function injectUnsubscribeLink(string $body, string $unsubUrl): string
     {
-        $unsubUrl = $this->appUrl . '/unsubscribe/' . $campaignEmail->getTrackingOpenId();
-        $unsubHtml = '<p style="text-align:center;font-size:11px;color:#aaa;margin-top:24px">'
-            . '<a href="' . $unsubUrl . '" style="color:#aaa">Clicca qui per disiscriverti</a>'
-            . '</p>';
-
-        if (str_contains($body, '</body>')) {
-            return str_replace('</body>', $unsubHtml . '</body>', $body);
-        }
-
-        return $body . $unsubHtml;
+        return str_replace('{{unsubscribe_url}}', $unsubUrl, $body);
     }
 
     private function generateUuid(): string
