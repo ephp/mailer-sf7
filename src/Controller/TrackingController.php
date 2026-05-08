@@ -73,44 +73,78 @@ class TrackingController extends AbstractController
     #[Route('/unsubscribe/{uuid}', name: 'tracking_unsubscribe', methods: ['GET'])]
     public function unsubscribe(
         string $uuid,
+        EntityManagerInterface $em,
+    ): Response {
+        $campaignEmail = $em->getRepository(CampaignEmail::class)->findOneBy(['unsubscribeToken' => $uuid]);
+
+        if ($campaignEmail === null) {
+            return new Response(
+                $this->renderInvalidPage(),
+                Response::HTTP_NOT_FOUND,
+                ['Content-Type' => 'text/html; charset=UTF-8']
+            );
+        }
+
+        return new Response(
+            $this->renderConfirmPage($uuid, $campaignEmail),
+            Response::HTTP_OK,
+            ['Content-Type' => 'text/html; charset=UTF-8']
+        );
+    }
+
+    #[Route('/unsubscribe/{uuid}', name: 'tracking_unsubscribe_post', methods: ['POST'])]
+    public function unsubscribePost(
+        string $uuid,
         Request $request,
         EntityManagerInterface $em,
         UnsubscribeRequestRepository $unsubscribeRepository,
     ): Response {
         $campaignEmail = $em->getRepository(CampaignEmail::class)->findOneBy(['unsubscribeToken' => $uuid]);
 
-        $alreadyDone = false;
-
-        if ($campaignEmail !== null) {
-            $existing = $unsubscribeRepository->findOneByCampaignEmail($campaignEmail);
-            if ($existing === null) {
-                $unsubscribeRequest = new UnsubscribeRequest(new \DateTimeImmutable());
-                $unsubscribeRequest->setCampaignEmail($campaignEmail);
-                $unsubscribeRequest->setIpAddress($request->getClientIp());
-                $em->persist($unsubscribeRequest);
-
-                $contact = $campaignEmail->getContact();
-                if ($contact !== null) {
-                    $contact->setIscritto(false);
-                }
-
-                $em->flush();
-            } else {
-                $alreadyDone = true;
-            }
+        if ($campaignEmail === null) {
+            return new Response(
+                $this->renderInvalidPage(),
+                Response::HTTP_NOT_FOUND,
+                ['Content-Type' => 'text/html; charset=UTF-8']
+            );
         }
 
-        $html = $alreadyDone
-            ? $this->renderUnsubscribePage('Già disiscritto', 'La tua richiesta di disiscrizione è già stata elaborata.')
-            : $this->renderUnsubscribePage('Disiscrizione confermata', 'Hai confermato la disiscrizione. Non riceverai più email da questa lista.');
+        $existing = $unsubscribeRepository->findOneByCampaignEmail($campaignEmail);
+        if ($existing !== null) {
+            return new Response(
+                $this->renderAlreadyDonePage(),
+                Response::HTTP_OK,
+                ['Content-Type' => 'text/html; charset=UTF-8']
+            );
+        }
 
-        return new Response($html, Response::HTTP_OK, ['Content-Type' => 'text/html; charset=UTF-8']);
+        $unsubscribeRequest = new UnsubscribeRequest(new \DateTimeImmutable());
+        $unsubscribeRequest->setCampaignEmail($campaignEmail);
+        $unsubscribeRequest->setIpAddress($request->getClientIp());
+        $em->persist($unsubscribeRequest);
+
+        $contact = $campaignEmail->getContact();
+        if ($contact !== null) {
+            $contact->unsubscribe();
+        }
+
+        $em->flush();
+
+        return new Response(
+            $this->renderSuccessPage($uuid),
+            Response::HTTP_OK,
+            ['Content-Type' => 'text/html; charset=UTF-8']
+        );
     }
 
-    private function renderUnsubscribePage(string $title, string $message): string
+    private function renderConfirmPage(string $uuid, CampaignEmail $campaignEmail): string
     {
-        $safeTitle = htmlspecialchars($title, ENT_QUOTES, 'UTF-8');
-        $safeMessage = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
+        $listName = htmlspecialchars(
+            $campaignEmail->getMailList()?->getName() ?? 'questa lista',
+            ENT_QUOTES,
+            'UTF-8'
+        );
+        $safeUuid = htmlspecialchars($uuid, ENT_QUOTES, 'UTF-8');
 
         return <<<HTML
 <!DOCTYPE html>
@@ -118,18 +152,110 @@ class TrackingController extends AbstractController
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{$safeTitle}</title>
+<title>Conferma disiscrizione</title>
 <style>
   body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f5f5f5;color:#333}
-  .card{background:#fff;padding:2rem 3rem;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);text-align:center;max-width:480px}
+  .card{background:#fff;padding:2rem 3rem;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);text-align:center;max-width:500px;width:100%}
+  h1{font-size:1.5rem;margin-bottom:1rem}
+  p{line-height:1.6;color:#555;margin-bottom:1.5rem}
+  .btn-confirm{display:inline-block;background:#d32f2f;color:#fff;border:none;padding:.75rem 2rem;border-radius:6px;font-size:1rem;cursor:pointer}
+  .btn-confirm:hover{background:#b71c1c}
+  .link-cancel{display:block;margin-top:1rem;color:#777;font-size:.9rem;text-decoration:none}
+  .link-cancel:hover{color:#333}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Conferma disiscrizione</h1>
+  <p>Stai per disiscriverti da <strong>{$listName}</strong>.<br>Non riceverai più email da questa lista.</p>
+  <form method="POST" action="/unsubscribe/{$safeUuid}">
+    <button type="submit" class="btn-confirm">Conferma disiscrizione</button>
+  </form>
+  <a href="javascript:history.back()" class="link-cancel">Annulla</a>
+</div>
+</body>
+</html>
+HTML;
+    }
+
+    private function renderSuccessPage(string $uuid): string
+    {
+        $safeUuid = htmlspecialchars($uuid, ENT_QUOTES, 'UTF-8');
+
+        return <<<HTML
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Disiscrizione confermata</title>
+<style>
+  body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f5f5f5;color:#333}
+  .card{background:#fff;padding:2rem 3rem;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);text-align:center;max-width:500px;width:100%}
+  h1{font-size:1.5rem;margin-bottom:1rem}
+  p{line-height:1.6;color:#555;margin-bottom:1.5rem}
+  .link-resubscribe{display:inline-block;color:#1976d2;font-size:.9rem}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Sei stato disiscritto</h1>
+  <p>La tua disiscrizione è stata confermata. Non riceverai più email da questa lista.</p>
+  <form method="POST" action="/unsubscribe/{$safeUuid}/resubscribe">
+    <button type="submit" class="link-resubscribe" style="background:none;border:none;cursor:pointer;font-size:.9rem">Iscriviti di nuovo</button>
+  </form>
+</div>
+</body>
+</html>
+HTML;
+    }
+
+    private function renderAlreadyDonePage(): string
+    {
+        return <<<'HTML'
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Già disiscritto</title>
+<style>
+  body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f5f5f5;color:#333}
+  .card{background:#fff;padding:2rem 3rem;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);text-align:center;max-width:500px;width:100%}
   h1{font-size:1.5rem;margin-bottom:1rem}
   p{line-height:1.6;color:#555}
 </style>
 </head>
 <body>
 <div class="card">
-  <h1>{$safeTitle}</h1>
-  <p>{$safeMessage}</p>
+  <h1>Già disiscritto</h1>
+  <p>La tua richiesta di disiscrizione è già stata elaborata in precedenza.</p>
+</div>
+</body>
+</html>
+HTML;
+    }
+
+    private function renderInvalidPage(): string
+    {
+        return <<<'HTML'
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Link non valido</title>
+<style>
+  body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f5f5f5;color:#333}
+  .card{background:#fff;padding:2rem 3rem;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);text-align:center;max-width:500px;width:100%}
+  h1{font-size:1.5rem;margin-bottom:1rem}
+  p{line-height:1.6;color:#555}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Link non valido</h1>
+  <p>Il link di disiscrizione non è valido o è scaduto.</p>
 </div>
 </body>
 </html>
