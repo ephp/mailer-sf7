@@ -23,6 +23,29 @@ class UnsubscribeRequestRepository extends ServiceEntityRepository
         return $this->findOneBy(['campaignEmail' => $campaignEmail]);
     }
 
+    /**
+     * @param int[] $ids
+     * @return array<int, true>
+     */
+    public function findSetByCampaignEmailIds(array $ids): array
+    {
+        if (empty($ids)) {
+            return [];
+        }
+
+        $requests = $this->findBy(['campaignEmail' => $ids]);
+
+        $set = [];
+        foreach ($requests as $ur) {
+            $ceId = $ur->getCampaignEmailId();
+            if ($ceId !== null) {
+                $set[$ceId] = true;
+            }
+        }
+
+        return $set;
+    }
+
     public function countByCampaign(Campaign $campaign): int
     {
         return (int) $this->createQueryBuilder('ur')

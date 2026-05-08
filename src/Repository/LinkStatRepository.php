@@ -68,6 +68,33 @@ class LinkStatRepository extends ServiceEntityRepository
     }
 
     /**
+     * @param int[] $ids
+     * @return array<int, int>
+     */
+    public function sumClicksByCampaignEmailIds(array $ids): array
+    {
+        if (empty($ids)) {
+            return [];
+        }
+
+        $inList = implode(',', array_map('intval', $ids));
+        $conn = $this->getEntityManager()->getConnection();
+        $result = $conn->executeQuery(
+            "SELECT campaign_email_id, SUM(count) AS total_clicks
+             FROM link_stat
+             WHERE campaign_email_id IN ($inList)
+             GROUP BY campaign_email_id"
+        );
+
+        $data = [];
+        foreach ($result->fetchAllAssociative() as $row) {
+            $data[(int) $row['campaign_email_id']] = (int) $row['total_clicks'];
+        }
+
+        return $data;
+    }
+
+    /**
      * @return list<array{original_url: string, unique_clicks: string, total_clicks: string}>
      */
     public function linksByCampaign(Campaign $campaign): array

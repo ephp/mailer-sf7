@@ -4,6 +4,7 @@ namespace App\Service;
 
 use App\Entity\Account;
 use App\Entity\Campaign;
+use App\Entity\CampaignEmail;
 use App\Entity\MailList;
 use App\Repository\CampaignEmailRepository;
 use App\Repository\CampaignRepository;
@@ -123,6 +124,45 @@ class StatisticsService
         }
 
         return $links;
+    }
+
+    /**
+     * @param CampaignEmail[] $campaignEmails
+     * @return list<array<string, mixed>>
+     */
+    public function buildRecipientsFromItems(array $campaignEmails): array
+    {
+        if (empty($campaignEmails)) {
+            return [];
+        }
+
+        $ids = array_map(fn(CampaignEmail $ce) => (int) $ce->getId(), $campaignEmails);
+
+        $openStats = $this->openStatRepository->findByCampaignEmailIds($ids);
+        $clickCounts = $this->linkStatRepository->sumClicksByCampaignEmailIds($ids);
+        $unsubscribedSet = $this->unsubscribeRepository->findSetByCampaignEmailIds($ids);
+
+        $rows = [];
+        foreach ($campaignEmails as $ce) {
+            $ceId = (int) $ce->getId();
+            $openStat = $openStats[$ceId] ?? null;
+            $clickCount = $clickCounts[$ceId] ?? 0;
+            $rows[] = [
+                'email' => $ce->getEmail(),
+                'contact_nome' => $ce->getContact()?->getNome(),
+                'contact_cognome' => $ce->getContact()?->getCognome(),
+                'mail_list_name' => $ce->getMailList()?->getName(),
+                'status' => $ce->getStatus()->value,
+                'opened' => $openStat !== null,
+                'opened_at' => $openStat?->getFirstOpenedAt()?->format(\DateTimeInterface::ATOM),
+                'open_count' => $openStat?->getCount() ?? 0,
+                'clicked' => $clickCount > 0,
+                'click_count' => $clickCount,
+                'unsubscribed' => isset($unsubscribedSet[$ceId]),
+            ];
+        }
+
+        return $rows;
     }
 
     public function getAccountStats(Account $account): array

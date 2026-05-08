@@ -3,9 +3,11 @@
 namespace App\Controller;
 
 use App\Entity\MailList;
+use App\Repository\CampaignEmailRepository;
 use App\Repository\CampaignRepository;
 use App\Service\StatisticsService;
 use Doctrine\Persistence\ManagerRegistry;
+use Knp\Component\Pager\PaginatorInterface;
 use Oi\ApiBundle\Model\ItemDetail;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -21,6 +23,7 @@ class StatisticsController extends AbstractController
     public function __construct(
         private readonly StatisticsService $statisticsService,
         private readonly CampaignRepository $campaignRepository,
+        private readonly CampaignEmailRepository $campaignEmailRepository,
     ) {}
 
     #[Route('/campaigns/{id}/stats', name: 'statistics_campaign', methods: ['GET'])]
@@ -107,6 +110,55 @@ class StatisticsController extends AbstractController
 
         $links = $this->statisticsService->getCampaignLinks($campaign);
         return new Response($serializer->serialize(new ItemDetail($links), 'json'));
+    }
+
+    #[Route('/campaigns/{id}/recipients', name: 'statistics_campaign_recipients', methods: ['GET'])]
+    #[IsGranted('ROLE_USER')]
+    public function campaignRecipients(
+        int $id,
+        Request $request,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+        PaginatorInterface $paginator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $campaign = $this->campaignRepository->findOneByIdAndAccount($id, $account);
+        if ($campaign === null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $statusFilter = $request->query->getString('status', '');
+        if (!in_array($statusFilter, ['sent', 'opened', 'clicked', 'unsubscribed'], true)) {
+            $statusFilter = null;
+        }
+
+        $page = max(1, $request->query->getInt('page', 1));
+        $perPage = max(1, min(200, $request->query->getInt('per_page', 50)));
+
+        $qb = $this->campaignEmailRepository->findByCampaignQueryForRecipients($campaign, $statusFilter);
+        $pagination = $paginator->paginate($qb, $page, $perPage, ['sortFieldParameterName' => '_disabled_sort']);
+
+        /** @var \App\Entity\CampaignEmail[] $pageItems */
+        $pageItems = iterator_to_array($pagination);
+        $items = $this->statisticsService->buildRecipientsFromItems($pageItems);
+
+        $data = [
+            'items' => $items,
+            'currentPage' => $pagination->getCurrentPageNumber(),
+            'itemCount' => $pagination->getTotalItemCount(),
+            'itemsPerPage' => $pagination->getItemNumberPerPage(),
+        ];
+
+        return new Response($serializer->serialize($data, 'json'));
     }
 
     #[Route('/statistics', name: 'statistics_account', methods: ['GET'])]

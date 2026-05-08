@@ -69,6 +69,29 @@ class OpenStatRepository extends ServiceEntityRepository
     }
 
     /**
+     * @param int[] $ids
+     * @return array<int, OpenStat>
+     */
+    public function findByCampaignEmailIds(array $ids): array
+    {
+        if (empty($ids)) {
+            return [];
+        }
+
+        $stats = $this->findBy(['campaignEmail' => $ids]);
+
+        $indexed = [];
+        foreach ($stats as $os) {
+            $ceId = $os->getCampaignEmailId();
+            if ($ceId !== null) {
+                $indexed[$ceId] = $os;
+            }
+        }
+
+        return $indexed;
+    }
+
+    /**
      * @return list<array{bucket: string, cnt: string}>
      */
     public function timelineByCampaign(Campaign $campaign, \DateTimeInterface $from, \DateTimeInterface $to): array

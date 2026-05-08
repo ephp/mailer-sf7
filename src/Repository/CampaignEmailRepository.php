@@ -5,8 +5,12 @@ namespace App\Repository;
 use App\Entity\Account;
 use App\Entity\Campaign;
 use App\Entity\CampaignEmail;
+use App\Entity\LinkStat;
 use App\Entity\MailList;
+use App\Entity\OpenStat;
+use App\Entity\UnsubscribeRequest;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
 use Ephp\MailflowBundle\Enum\CampaignEmailStatus;
 
@@ -92,6 +96,32 @@ class CampaignEmailRepository extends ServiceEntityRepository
             ->setParameter('status', $status)
             ->getQuery()
             ->getSingleScalarResult();
+    }
+
+    public function findByCampaignQueryForRecipients(Campaign $campaign, ?string $statusFilter = null): QueryBuilder
+    {
+        $qb = $this->createQueryBuilder('ce')
+            ->leftJoin('ce.contact', 'con')
+            ->leftJoin('ce.mailList', 'ml')
+            ->addSelect('con', 'ml')
+            ->where('ce.campaign = :campaign')
+            ->setParameter('campaign', $campaign)
+            ->orderBy('ce.id', 'ASC');
+
+        return match ($statusFilter) {
+            'sent' => $qb->andWhere('ce.status = :status')
+                ->setParameter('status', CampaignEmailStatus::Sent),
+            'opened' => $qb->andWhere(
+                'EXISTS (SELECT 1 FROM ' . OpenStat::class . ' os WHERE os.campaignEmail = ce)'
+            ),
+            'clicked' => $qb->andWhere(
+                'EXISTS (SELECT 1 FROM ' . LinkStat::class . ' ls WHERE ls.campaignEmail = ce AND ls.count > 0)'
+            ),
+            'unsubscribed' => $qb->andWhere(
+                'EXISTS (SELECT 1 FROM ' . UnsubscribeRequest::class . ' ur WHERE ur.campaignEmail = ce)'
+            ),
+            default => $qb,
+        };
     }
 
     /** @return string[] */
