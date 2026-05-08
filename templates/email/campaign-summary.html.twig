@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        h1 { color: #2e7d32; border-bottom: 2px solid #2e7d32; padding-bottom: 8px; }
+        p { margin: 8px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f5f5f5; font-weight: bold; color: #555; }
+        td { font-size: 18px; font-weight: bold; }
+        .btn { display: inline-block; padding: 12px 24px; background-color: #1976d2; color: #ffffff; text-decoration: none; border-radius: 4px; margin-top: 24px; font-size: 14px; }
+        .footer { margin-top: 32px; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 16px; }
+    </style>
+</head>
+<body>
+    <h1>Campagna completata</h1>
+
+    <p>Ciao,</p>
+    <p>La campagna <strong>{{ campaign.name ?? campaign.emailSubject }}</strong> ha terminato l'invio.</p>
+
+    <table>
+        <tr>
+            <th>Totale destinatari</th>
+            <td>{{ total }}</td>
+        </tr>
+        <tr>
+            <th>Inviate con successo</th>
+            <td>{{ counts.sent ?? 0 }}</td>
+        </tr>
+        <tr>
+            <th>Fallite</th>
+            <td>{{ counts.failed ?? 0 }}</td>
+        </tr>
+        <tr>
+            <th>Bounce</th>
+            <td>{{ counts.bounced ?? 0 }}</td>
+        </tr>
+    </table>
+
+    <a href="{{ statsUrl }}" class="btn">Vai alle statistiche</a>
+
+    <div class="footer">
+        <p>MailFlow &mdash; {{ account.ragioneSociale }}</p>
+    </div>
+</body>
+</html>
