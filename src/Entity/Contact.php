@@ -39,6 +39,9 @@ class Contact
     #[ORM\Column(type: 'boolean', options: ['default' => true])]
     private bool $iscritto = true;
 
+    #[ORM\Column(type: 'datetime', nullable: true)]
+    private ?\DateTime $dataDisiscrizione = null;
+
     #[ORM\Column(type: 'integer', options: ['default' => 0])]
     private int $bounceCount = 0;
 
@@ -104,6 +107,23 @@ class Contact
     {
         $this->iscritto = $iscritto;
         return $this;
+    }
+
+    public function getDataDisiscrizione(): ?\DateTime
+    {
+        return $this->dataDisiscrizione;
+    }
+
+    public function setDataDisiscrizione(?\DateTime $dataDisiscrizione): static
+    {
+        $this->dataDisiscrizione = $dataDisiscrizione;
+        return $this;
+    }
+
+    public function unsubscribe(): void
+    {
+        $this->iscritto = false;
+        $this->dataDisiscrizione = new \DateTime();
     }
 
     public function getBounceCount(): int
