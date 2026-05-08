@@ -1,0 +1,7 @@
+{% extends 'email/base.html.twig' %}
+
+{% block email_body %}
+<div style="color:{{ textColor }};font-size:15px;line-height:1.6;">
+  {{ body|raw }}
+</div>
+{% endblock %}

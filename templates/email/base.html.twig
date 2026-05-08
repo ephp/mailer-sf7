@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>{{ subject }}</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, Helvetica, sans-serif; }
+    table { border-collapse: collapse; }
+    img { border: 0; display: block; max-width: 100%; }
+    a { color: {{ primaryColor }}; text-decoration: none; }
+    .email-wrapper { width: 100%; background-color: #f4f4f4; padding: 20px 0; }
+    .email-container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+    .email-header { background-color: {{ primaryColor }}; padding: 24px 32px; text-align: center; }
+    .email-header img { max-height: 48px; margin: 0 auto; }
+    .email-header-text { color: #ffffff; font-size: 22px; font-weight: bold; margin: 0; }
+    .email-body { padding: 32px; color: {{ textColor }}; font-size: 15px; line-height: 1.6; }
+    .email-footer { background-color: #f0f0f0; padding: 20px 32px; text-align: center; font-size: 12px; color: #888888; border-top: 1px solid #e0e0e0; }
+    .email-footer a { color: #888888; text-decoration: underline; }
+    @media only screen and (max-width: 600px) {
+      .email-container { width: 100% !important; }
+      .email-body { padding: 20px 16px !important; }
+      .email-header { padding: 16px !important; }
+      .email-footer { padding: 16px !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+    <table class="email-container" width="600" cellpadding="0" cellspacing="0" align="center">
+      <tr>
+        <td class="email-header">
+          {% if logo %}
+            <img src="{{ logo }}" alt="{{ account.ragioneSociale }}" style="max-height:48px;margin:0 auto;">
+          {% else %}
+            <p class="email-header-text">{{ account.ragioneSociale }}</p>
+          {% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td class="email-body">
+          {% block email_body %}{% endblock %}
+        </td>
+      </tr>
+      <tr>
+        <td class="email-footer">
+          <p style="margin:0 0 8px;">{{ account.ragioneSociale }}</p>
+          {% if unsubscribeUrl %}
+            <p style="margin:0;"><a href="{{ unsubscribeUrl }}">Disiscriviti</a></p>
+          {% endif %}
+        </td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>

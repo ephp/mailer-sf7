@@ -1,0 +1,13 @@
+{% extends 'email/base.html.twig' %}
+
+{% block email_body %}
+<div style="color:{{ textColor }};font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:1.8;">
+  {{ body|raw }}
+</div>
+{% if account.ragioneSociale %}
+  <div style="margin-top:40px;padding-top:20px;border-top:1px solid #e0e0e0;font-family:Georgia,'Times New Roman',serif;font-size:14px;color:#666666;">
+    <p style="margin:0;">Cordiali saluti,</p>
+    <p style="margin:4px 0 0;font-weight:bold;">{{ account.ragioneSociale }}</p>
+  </div>
+{% endif %}
+{% endblock %}
