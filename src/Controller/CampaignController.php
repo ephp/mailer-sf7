@@ -144,6 +144,96 @@ class CampaignController extends AbstractController
         return new Response($serializer->serialize($detail, 'json'), Response::HTTP_OK);
     }
 
+    #[Route('/campaigns/{id}/send-test', name: 'campaign_send_test', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function sendTest(
+        int $id,
+        Request $request,
+        CampaignRepository $campaignRepository,
+        EmailTemplateRenderer $renderer,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $campaign = $campaignRepository->findOneByIdAndAccount($id, $account);
+
+        if ($campaign === null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $data = json_decode($request->getContent(), true) ?? [];
+        $emails = array_values(array_filter((array) ($data['emails'] ?? []), 'is_string'));
+
+        if (count($emails) === 0 || count($emails) > 5) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.send_test_email_count'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        foreach ($emails as $emailAddr) {
+            if (!filter_var($emailAddr, FILTER_VALIDATE_EMAIL)) {
+                $detail = new ItemDetail(null, $translator->trans('campaign.error.invalid_email'), ItemDetail::MESSAGE_ERROR);
+                return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+        }
+
+        $dsnOverride = null;
+        foreach ($campaign->getMailLists() as $mailList) {
+            $dsnOverride = $mailList->getEffectiveDsn();
+            if ($dsnOverride !== null) {
+                break;
+            }
+        }
+
+        try {
+            $mailer = $this->mailerFactory->createMailer($account, $dsnOverride);
+        } catch (\RuntimeException $e) {
+            $detail = new ItemDetail(null, $e->getMessage(), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+
+        $rendered = $renderer->render($campaign);
+        $fromAddress = $account->getMailFrom() ?? '';
+        $fromName = $account->getMailFromName() ?? '';
+        $subject = '[TEST] ' . ($campaign->getEmailSubject() ?? '');
+
+        $sent = 0;
+        $failed = 0;
+        $errors = [];
+
+        foreach ($emails as $recipientEmail) {
+            try {
+                $email = (new Email())
+                    ->from(new Address($fromAddress, $fromName))
+                    ->to($recipientEmail)
+                    ->subject($subject)
+                    ->html($rendered->html)
+                    ->text($rendered->plainText);
+
+                $mailer->send($email);
+                $sent++;
+            } catch (TransportExceptionInterface $e) {
+                $failed++;
+                $errors[] = $recipientEmail . ': ' . $e->getMessage();
+            }
+        }
+
+        $result = ['sent' => $sent, 'failed' => $failed];
+        if (!empty($errors)) {
+            $result['errors'] = $errors;
+        }
+
+        return new Response($serializer->serialize(new ItemDetail($result), 'json'), Response::HTTP_OK);
+    }
+
     #[Route('/campaigns', name: 'campaign_create', methods: ['POST'])]
     #[IsGranted('ROLE_USER')]
     public function create(
