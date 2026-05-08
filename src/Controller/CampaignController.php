@@ -16,6 +16,7 @@ use App\Repository\LinkStatRepository;
 use App\Repository\OpenStatRepository;
 use App\Repository\UnsubscribeRequestRepository;
 use App\Service\AccountMailerFactory;
+use App\Service\CampaignSenderService;
 use App\Service\EmailTemplateRenderer;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
@@ -45,6 +46,7 @@ class CampaignController extends AbstractController
         private readonly AccountMailerFactory $mailerFactory,
         private readonly MessageBusInterface $bus,
         private readonly ContactRepository $contactRepository,
+        private readonly CampaignSenderService $campaignSenderService,
         #[Autowire('%ephp_mailflow.default_batch_size%')]
         private readonly int $batchSize,
         #[Autowire('%ephp_mailflow.default_send_interval%')]
@@ -574,42 +576,55 @@ class CampaignController extends AbstractController
     #[IsGranted('ROLE_USER')]
     public function send(
         int $id,
-        Request $request,
-        ManagerRegistry $doctrine,
+        CampaignRepository $campaignRepository,
+        EntityManagerInterface $em,
         SerializerInterface $serializer,
         TranslatorInterface $translator,
     ): Response {
-        $campaign = $this->findCampaignForUser($id, $doctrine, $translator, $serializer);
-        if ($campaign instanceof Response) {
-            return $campaign;
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
         }
 
-        $scheduledAtRaw = $request->request->get('scheduled_at');
-        if ($scheduledAtRaw !== null && $scheduledAtRaw !== '') {
-            try {
-                $scheduledAt = new \DateTimeImmutable($scheduledAtRaw);
-                $campaign->setScheduledAt($scheduledAt);
-            } catch (\Exception) {
-                $detail = new ItemDetail(null, $translator->trans('campaign.error.invalid_date'), ItemDetail::MESSAGE_ERROR);
-                return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
-            }
-        } else {
-            $campaign->setScheduledAt(null);
+        $campaign = $campaignRepository->findOneByIdAndAccount($id, $account);
+
+        if ($campaign === null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
         }
 
-        $campaign->setDraft(false);
+        if ($campaign->getStatus() !== 'draft' || $campaign->getSentAt() !== null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_draft'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_BAD_REQUEST);
+        }
 
-        $em = $doctrine->getManager();
+        if ($campaign->getMailLists()->isEmpty()) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.no_mail_lists'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_BAD_REQUEST);
+        }
+
+        if ($account->getEffectiveDsn() === null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.smtp_not_configured'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_BAD_REQUEST);
+        }
+
+        if ($this->campaignSenderService->countRecipients($campaign) === 0) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.no_recipients'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_BAD_REQUEST);
+        }
+
+        $totalEmails = $this->campaignSenderService->prepareCampaign($campaign);
+        $this->campaignSenderService->dispatchAll($campaign);
+
+        $campaign->setStatus('sending');
         $em->flush();
 
-        $this->dispatchCampaignEmails($campaign, $em);
-
-        $message = $campaign->getScheduledAt() !== null
-            ? $translator->trans('campaign.success.scheduled')
-            : $translator->trans('campaign.success.sent');
-
-        $detail = new ItemDetail($campaign, $message);
-        return new Response($serializer->serialize($detail, 'json'));
+        $detail = new ItemDetail(['total_emails' => $totalEmails]);
+        return new Response($serializer->serialize($detail, 'json'), Response::HTTP_ACCEPTED);
     }
 
     #[Route('/campaigns/{id}/stats', name: 'campaign_stats', methods: ['GET'])]

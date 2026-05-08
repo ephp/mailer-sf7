@@ -1,6 +1,10 @@
 campaign:
   error:
     name_required: "Name is required."
+    not_draft: "Campaign is not in draft status."
+    no_mail_lists: "Campaign has no associated mailing lists."
+    smtp_not_configured: "SMTP not configured for this account."
+    no_recipients: "No recipients found for this campaign."
   success:
     saved_as_template: "Campaign saved as template."
     duplicated: "Campaign duplicated successfully."

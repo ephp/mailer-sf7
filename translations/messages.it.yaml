@@ -1,6 +1,10 @@
 campaign:
   error:
     name_required: "Il nome è obbligatorio."
+    not_draft: "La campagna non è in stato bozza."
+    no_mail_lists: "La campagna non ha liste di distribuzione associate."
+    smtp_not_configured: "SMTP non configurato per questo account."
+    no_recipients: "Nessun destinatario trovato per questa campagna."
   success:
     saved_as_template: "Campagna salvata come template."
     duplicated: "Campagna duplicata con successo."
