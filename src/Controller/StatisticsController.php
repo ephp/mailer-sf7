@@ -161,6 +161,75 @@ class StatisticsController extends AbstractController
         return new Response($serializer->serialize($data, 'json'));
     }
 
+    #[Route('/campaigns/{id}/recipients/csv', name: 'statistics_campaign_recipients_csv', methods: ['GET'])]
+    #[IsGranted('ROLE_USER')]
+    public function campaignRecipientsCsv(
+        int $id,
+        Request $request,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $campaign = $this->campaignRepository->findOneByIdAndAccount($id, $account);
+        if ($campaign === null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $statusFilter = $request->query->getString('status', '');
+        if (!in_array($statusFilter, ['sent', 'opened', 'clicked', 'unsubscribed'], true)) {
+            $statusFilter = null;
+        }
+
+        $qb = $this->campaignEmailRepository->findByCampaignQueryForRecipients($campaign, $statusFilter);
+        /** @var \App\Entity\CampaignEmail[] $allItems */
+        $allItems = $qb->getQuery()->getResult();
+        $recipients = $this->statisticsService->buildRecipientsFromItems($allItems);
+
+        $handle = fopen('php://temp', 'r+');
+        if ($handle === false) {
+            return new Response('', Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+
+        fputcsv($handle, ['id', 'email', 'nome', 'cognome', 'mail_list', 'status', 'opened', 'opened_at', 'open_count', 'clicked', 'click_count', 'unsubscribed']);
+
+        foreach ($allItems as $i => $ce) {
+            $row = $recipients[$i];
+            fputcsv($handle, [
+                (int) $ce->getId(),
+                $row['email'],
+                $row['contact_nome'] ?? '',
+                $row['contact_cognome'] ?? '',
+                $row['mail_list_name'] ?? '',
+                $row['status'],
+                $row['opened'] ? '1' : '0',
+                $row['opened_at'] ?? '',
+                $row['open_count'],
+                $row['clicked'] ? '1' : '0',
+                $row['click_count'],
+                $row['unsubscribed'] ? '1' : '0',
+            ]);
+        }
+
+        rewind($handle);
+        $csvContent = stream_get_contents($handle);
+        fclose($handle);
+
+        $response = new Response("\xEF\xBB\xBF" . $csvContent);
+        $response->headers->set('Content-Type', 'text/csv; charset=utf-8');
+        $response->headers->set('Content-Disposition', "attachment; filename=campaign-{$id}-recipients.csv");
+
+        return $response;
+    }
+
     #[Route('/statistics', name: 'statistics_account', methods: ['GET'])]
     #[IsGranted('ROLE_USER')]
     public function accountStats(
