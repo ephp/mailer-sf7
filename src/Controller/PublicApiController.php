@@ -8,19 +8,15 @@ use App\Entity\Contact;
 use App\Entity\ContactTaxonomy;
 use App\Entity\MailList;
 use App\Entity\TaxonomyTerm;
-use App\Repository\CampaignEmailRepository;
 use App\Repository\ContactRepository;
 use App\Repository\ContactTaxonomyRepository;
-use App\Repository\LinkStatRepository;
 use App\Repository\MailListRepository;
-use App\Repository\OpenStatRepository;
-use App\Repository\UnsubscribeRequestRepository;
 use App\Service\CampaignSenderService;
 use App\Service\PrivacyPolicyService;
+use App\Service\StatisticsService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use Oi\ApiBundle\Model\ItemDetail;
-use Ephp\MailflowBundle\Enum\CampaignEmailStatus;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -470,20 +466,13 @@ class PublicApiController extends AbstractController
 
     /**
      * GET /api/public/v1/campaigns/{id}/stats
-     *
-     * Return delivery and engagement statistics for a campaign.
      */
     #[Route('/campaigns/{id}/stats', name: 'public_api_campaigns_stats', methods: ['GET'])]
     public function campaignStats(
         int $id,
         Request $request,
         ManagerRegistry $doctrine,
-        SerializerInterface $serializer,
-        TranslatorInterface $translator,
-        CampaignEmailRepository $campaignEmailRepository,
-        OpenStatRepository $openStatRepository,
-        LinkStatRepository $linkStatRepository,
-        UnsubscribeRequestRepository $unsubscribeRepository,
+        StatisticsService $statisticsService,
     ): Response {
         /** @var Account $account */
         $account = $request->attributes->get('mailflow_account');
@@ -493,33 +482,10 @@ class PublicApiController extends AbstractController
         $campaign = $em->find(Campaign::class, $id);
 
         if ($campaign === null || $campaign->getAccountId() !== $account->getId()) {
-            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_found'), ItemDetail::MESSAGE_ERROR);
-            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+            return new JsonResponse(['error' => 'not_found', 'message' => 'Campaign not found'], Response::HTTP_NOT_FOUND);
         }
 
-        $totalSent = $campaignEmailRepository->countByCampaignAndStatus($campaign, CampaignEmailStatus::Sent);
-        $totalFailed = $campaignEmailRepository->countByCampaignAndStatus($campaign, CampaignEmailStatus::Failed);
-        $totalPending = $campaignEmailRepository->countByCampaignAndStatus($campaign, CampaignEmailStatus::Pending);
-        $totalBounced = $campaignEmailRepository->countByCampaignAndStatus($campaign, CampaignEmailStatus::Bounced);
-        $totalOpens = $openStatRepository->countUniqueByCampaign($campaign);
-        $totalClicks = $linkStatRepository->countUniqueByCampaign($campaign);
-        $totalUnsubscribes = $unsubscribeRepository->countByCampaign($campaign);
-
-        $stats = [
-            'total_sent' => $totalSent,
-            'total_failed' => $totalFailed,
-            'total_pending' => $totalPending,
-            'total_bounced' => $totalBounced,
-            'total_opens' => $totalOpens,
-            'total_clicks' => $totalClicks,
-            'total_unsubscribes' => $totalUnsubscribes,
-            'open_rate' => $totalSent > 0 ? round($totalOpens / $totalSent * 100, 1) : 0.0,
-            'click_rate' => $totalSent > 0 ? round($totalClicks / $totalSent * 100, 1) : 0.0,
-            'unsubscribe_rate' => $totalSent > 0 ? round($totalUnsubscribes / $totalSent * 100, 1) : 0.0,
-        ];
-
-        $detail = new ItemDetail($stats);
-        return new Response($serializer->serialize($detail, 'json'));
+        return new JsonResponse($statisticsService->getCampaignStats($campaign));
     }
 
     /**
