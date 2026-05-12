@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Entity\Account;
 use App\Entity\Campaign;
 use App\Entity\CampaignEmail;
 use App\Entity\Contact;
@@ -13,7 +14,6 @@ use App\Repository\ContactRepository;
 use App\Repository\LinkStatRepository;
 use App\Repository\OpenStatRepository;
 use App\Repository\UnsubscribeRequestRepository;
-use App\Security\ApiKeyAuthenticator;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use Oi\ApiBundle\Model\ItemDetail;
@@ -31,11 +31,10 @@ use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
-#[Route('/api/public')]
+#[Route('/api/public/v1')]
 class PublicApiController extends AbstractController
 {
     public function __construct(
-        private readonly ApiKeyAuthenticator $authenticator,
         private readonly FormErrorMessageHandlerInterface $formErrorMessageHandler,
         private readonly MessageBusInterface $bus,
         private readonly ContactRepository $contactRepository,
@@ -46,7 +45,7 @@ class PublicApiController extends AbstractController
     ) {}
 
     /**
-     * POST /api/public/contacts
+     * POST /api/public/v1/contacts
      *
      * Upsert a contact in a list identified by list_id.
      * Body: { list_id: int, email: string, nome?: string, cognome?: string, telefono?: string, iscritto?: bool|string }
@@ -59,14 +58,8 @@ class PublicApiController extends AbstractController
         TranslatorInterface $translator,
         ValidatorInterface $validator,
     ): Response {
-        $account = $this->authenticator->getAccount($request);
-        if ($account === null) {
-            return $this->unauthorizedResponse($serializer);
-        }
-
-        if (!$this->authenticator->checkRateLimit($account)) {
-            return $this->rateLimitResponse($serializer);
-        }
+        /** @var Account $account */
+        $account = $request->attributes->get('mailflow_account');
 
         $data = $request->request->all();
 
@@ -135,7 +128,7 @@ class PublicApiController extends AbstractController
     }
 
     /**
-     * POST /api/public/campaigns
+     * POST /api/public/v1/campaigns
      *
      * Create a new campaign draft.
      * Body: { campaign: { emailSubject: string, name?: string, snippet?: string, body?: string }, mail_list_ids?: int[] }
@@ -147,14 +140,8 @@ class PublicApiController extends AbstractController
         SerializerInterface $serializer,
         TranslatorInterface $translator,
     ): Response {
-        $account = $this->authenticator->getAccount($request);
-        if ($account === null) {
-            return $this->unauthorizedResponse($serializer);
-        }
-
-        if (!$this->authenticator->checkRateLimit($account)) {
-            return $this->rateLimitResponse($serializer);
-        }
+        /** @var Account $account */
+        $account = $request->attributes->get('mailflow_account');
 
         $data = $request->request->all();
         $campaignData = $data['campaign'] ?? $data;
@@ -185,7 +172,7 @@ class PublicApiController extends AbstractController
     }
 
     /**
-     * POST /api/public/campaigns/{id}/send
+     * POST /api/public/v1/campaigns/{id}/send
      *
      * Trigger sending of a campaign (or schedule it).
      * Body: { scheduled_at?: string (ISO 8601) }
@@ -198,14 +185,8 @@ class PublicApiController extends AbstractController
         SerializerInterface $serializer,
         TranslatorInterface $translator,
     ): Response {
-        $account = $this->authenticator->getAccount($request);
-        if ($account === null) {
-            return $this->unauthorizedResponse($serializer);
-        }
-
-        if (!$this->authenticator->checkRateLimit($account)) {
-            return $this->rateLimitResponse($serializer);
-        }
+        /** @var Account $account */
+        $account = $request->attributes->get('mailflow_account');
 
         $em = $doctrine->getManager();
         /** @var Campaign|null $campaign */
@@ -219,7 +200,7 @@ class PublicApiController extends AbstractController
         $scheduledAtRaw = $request->request->get('scheduled_at');
         if ($scheduledAtRaw !== null && $scheduledAtRaw !== '') {
             try {
-                $campaign->setScheduledAt(new \DateTimeImmutable($scheduledAtRaw));
+                $campaign->setScheduledAt(new \DateTime($scheduledAtRaw));
             } catch (\Exception) {
                 $detail = new ItemDetail(null, $translator->trans('campaign.error.invalid_date'), ItemDetail::MESSAGE_ERROR);
                 return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
@@ -242,7 +223,7 @@ class PublicApiController extends AbstractController
     }
 
     /**
-     * GET /api/public/campaigns/{id}/stats
+     * GET /api/public/v1/campaigns/{id}/stats
      *
      * Return delivery and engagement statistics for a campaign.
      */
@@ -258,14 +239,8 @@ class PublicApiController extends AbstractController
         LinkStatRepository $linkStatRepository,
         UnsubscribeRequestRepository $unsubscribeRepository,
     ): Response {
-        $account = $this->authenticator->getAccount($request);
-        if ($account === null) {
-            return $this->unauthorizedResponse($serializer);
-        }
-
-        if (!$this->authenticator->checkRateLimit($account)) {
-            return $this->rateLimitResponse($serializer);
-        }
+        /** @var Account $account */
+        $account = $request->attributes->get('mailflow_account');
 
         $em = $doctrine->getManager();
         /** @var Campaign|null $campaign */
@@ -299,22 +274,6 @@ class PublicApiController extends AbstractController
 
         $detail = new ItemDetail($stats);
         return new Response($serializer->serialize($detail, 'json'));
-    }
-
-    private function unauthorizedResponse(SerializerInterface $serializer): Response
-    {
-        $detail = new ItemDetail(null, 'Unauthorized: missing or invalid X-API-Key header', ItemDetail::MESSAGE_ERROR);
-        return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNAUTHORIZED);
-    }
-
-    private function rateLimitResponse(SerializerInterface $serializer): Response
-    {
-        $detail = new ItemDetail(null, 'Too Many Requests: rate limit exceeded (60 req/min)', ItemDetail::MESSAGE_ERROR);
-        return new Response(
-            $serializer->serialize($detail, 'json'),
-            Response::HTTP_TOO_MANY_REQUESTS,
-            ['Retry-After' => '60'],
-        );
     }
 
     private function dispatchCampaignEmails(Campaign $campaign, EntityManagerInterface $em): void
@@ -379,7 +338,7 @@ class PublicApiController extends AbstractController
     private function syncMailLists(
         Campaign $campaign,
         array $listIds,
-        \App\Entity\Account $account,
+        Account $account,
         EntityManagerInterface $em,
     ): void {
         $collection = $campaign->getMailLists();
