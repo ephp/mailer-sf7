@@ -17,6 +17,7 @@ use App\Service\StatisticsService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use Oi\ApiBundle\Model\ItemDetail;
+use OpenApi\Attributes as OA;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -34,12 +35,17 @@ class PublicApiController extends AbstractController
         private readonly ContactRepository $contactRepository,
     ) {}
 
-    /**
-     * POST /api/public/v1/contacts
-     *
-     * Upsert a contact in a list identified by list_id.
-     * Body: { list_id: int, email: string, nome?: string, cognome?: string, telefono?: string, iscritto?: bool|string }
-     */
+    #[OA\Post(
+        path: '/api/public/v1/contacts',
+        operationId: 'upsertContact',
+        summary: 'Crea o aggiorna un contatto (endpoint legacy)',
+        description: 'Endpoint precedente per upsert contatto tramite form-data. Usa POST /lists/{listId}/contacts per le nuove integrazioni.',
+        tags: ['Contacts'],
+        deprecated: true
+    )]
+    #[OA\Response(response: 201, description: 'Contatto creato')]
+    #[OA\Response(response: 200, description: 'Contatto aggiornato')]
+    #[OA\Response(response: 422, description: 'Errore di validazione')]
     #[Route('/contacts', name: 'public_api_contacts_upsert', methods: ['POST'])]
     public function upsertContact(
         Request $request,
@@ -117,12 +123,78 @@ class PublicApiController extends AbstractController
         return new Response($serializer->serialize($detail, 'json'), $status);
     }
 
-    /**
-     * POST /api/public/v1/lists/{listId}/contacts
-     *
-     * Subscribe (upsert) a contact to a specific list with explicit privacy consent.
-     * Body JSON: { email, nome?, cognome?, telefono?, term_ids?: int[], privacy_accepted: boolean }
-     */
+    #[OA\Post(
+        path: '/api/public/v1/lists/{listId}/contacts',
+        operationId: 'subscribe',
+        summary: 'Iscrive o aggiorna un contatto in una lista',
+        description: 'Esegue upsert di un contatto nella lista specificata con consenso privacy esplicito. Se il contatto esiste ed è discritto, viene automaticamente reiscritto. I term_ids vengono filtrati ai termini appartenenti alla lista.',
+        tags: ['Contacts']
+    )]
+    #[OA\Parameter(
+        name: 'listId',
+        in: 'path',
+        required: true,
+        description: 'ID della lista di destinazione',
+        schema: new OA\Schema(type: 'integer', example: 1)
+    )]
+    #[OA\RequestBody(
+        required: true,
+        content: new OA\JsonContent(
+            required: ['email', 'privacy_accepted'],
+            properties: [
+                new OA\Property(property: 'email', type: 'string', format: 'email', example: 'mario.rossi@esempio.it'),
+                new OA\Property(property: 'nome', type: 'string', example: 'Mario', nullable: true),
+                new OA\Property(property: 'cognome', type: 'string', example: 'Rossi', nullable: true),
+                new OA\Property(property: 'telefono', type: 'string', example: '+39 055 123456', nullable: true),
+                new OA\Property(property: 'term_ids', type: 'array', items: new OA\Items(type: 'integer'), description: 'IDs dei termini di tassonomia da applicare'),
+                new OA\Property(property: 'privacy_accepted', type: 'boolean', example: true, description: 'Deve essere true per procedere'),
+            ]
+        )
+    )]
+    #[OA\Response(
+        response: 201,
+        description: 'Contatto creato con successo',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'contact_id', type: 'integer', example: 42),
+                new OA\Property(property: 'email', type: 'string', example: 'mario.rossi@esempio.it'),
+                new OA\Property(property: 'iscritto', type: 'boolean', example: true),
+                new OA\Property(property: 'privacy_accepted_at', type: 'string', format: 'date-time', example: '2026-05-12T10:00:00+00:00'),
+            ]
+        )
+    )]
+    #[OA\Response(
+        response: 200,
+        description: 'Contatto aggiornato con successo',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'contact_id', type: 'integer', example: 42),
+                new OA\Property(property: 'email', type: 'string', example: 'mario.rossi@esempio.it'),
+                new OA\Property(property: 'iscritto', type: 'boolean', example: true),
+                new OA\Property(property: 'privacy_accepted_at', type: 'string', format: 'date-time', example: '2026-05-12T10:00:00+00:00'),
+            ]
+        )
+    )]
+    #[OA\Response(
+        response: 404,
+        description: 'Lista non trovata',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'error', type: 'string', example: 'not_found'),
+                new OA\Property(property: 'message', type: 'string', example: 'List not found'),
+            ]
+        )
+    )]
+    #[OA\Response(
+        response: 422,
+        description: 'Errore di validazione (email non valida o privacy_accepted mancante)',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'error', type: 'string', example: 'subscribe.error.privacy_required'),
+                new OA\Property(property: 'message', type: 'string', example: 'Privacy acceptance is required'),
+            ]
+        )
+    )]
     #[Route('/lists/{listId}/contacts', name: 'public_api_lists_contacts_subscribe', methods: ['POST'])]
     public function subscribe(
         int $listId,
@@ -203,11 +275,38 @@ class PublicApiController extends AbstractController
         ], $isNew ? Response::HTTP_CREATED : Response::HTTP_OK);
     }
 
-    /**
-     * DELETE /api/public/v1/lists/{listId}/contacts/{email}
-     *
-     * Unsubscribe a contact from a list. Idempotent: returns 404 if contact not found.
-     */
+    #[OA\Delete(
+        path: '/api/public/v1/lists/{listId}/contacts/{email}',
+        operationId: 'unsubscribe',
+        summary: 'Disiscrive un contatto da una lista',
+        description: 'Disiscrive il contatto identificato dall\'email dalla lista specificata. Idempotente: restituisce 404 se il contatto non esiste, senza generare errori su chiamate ripetute.',
+        tags: ['Contacts']
+    )]
+    #[OA\Parameter(
+        name: 'listId',
+        in: 'path',
+        required: true,
+        description: 'ID della lista',
+        schema: new OA\Schema(type: 'integer', example: 1)
+    )]
+    #[OA\Parameter(
+        name: 'email',
+        in: 'path',
+        required: true,
+        description: 'Indirizzo email del contatto (URL-encoded se contiene caratteri speciali)',
+        schema: new OA\Schema(type: 'string', example: 'mario.rossi%40esempio.it')
+    )]
+    #[OA\Response(response: 204, description: 'Contatto discritto con successo')]
+    #[OA\Response(
+        response: 404,
+        description: 'Lista o contatto non trovato',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'error', type: 'string', example: 'not_found'),
+                new OA\Property(property: 'message', type: 'string', example: 'Contact not found'),
+            ]
+        )
+    )]
     #[Route('/lists/{listId}/contacts/{email}', name: 'public_api_lists_contacts_unsubscribe', methods: ['DELETE'], requirements: ['email' => '.+'])]
     public function unsubscribe(
         int $listId,
@@ -237,11 +336,52 @@ class PublicApiController extends AbstractController
         return new Response(null, Response::HTTP_NO_CONTENT);
     }
 
-    /**
-     * GET /api/public/v1/lists/{listId}/contacts/{email}
-     *
-     * Look up a contact's status in a list.
-     */
+    #[OA\Get(
+        path: '/api/public/v1/lists/{listId}/contacts/{email}',
+        operationId: 'findContact',
+        summary: 'Recupera lo stato di un contatto in una lista',
+        description: 'Restituisce i dati e lo stato di iscrizione di un contatto, inclusi i termini di tassonomia associati e la data di consenso privacy.',
+        tags: ['Contacts']
+    )]
+    #[OA\Parameter(
+        name: 'listId',
+        in: 'path',
+        required: true,
+        description: 'ID della lista',
+        schema: new OA\Schema(type: 'integer', example: 1)
+    )]
+    #[OA\Parameter(
+        name: 'email',
+        in: 'path',
+        required: true,
+        description: 'Indirizzo email del contatto (URL-encoded se contiene caratteri speciali)',
+        schema: new OA\Schema(type: 'string', example: 'mario.rossi%40esempio.it')
+    )]
+    #[OA\Response(
+        response: 200,
+        description: 'Dati del contatto',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'email', type: 'string', example: 'mario.rossi@esempio.it'),
+                new OA\Property(property: 'nome', type: 'string', example: 'Mario', nullable: true),
+                new OA\Property(property: 'cognome', type: 'string', example: 'Rossi', nullable: true),
+                new OA\Property(property: 'telefono', type: 'string', example: '+39 055 123456', nullable: true),
+                new OA\Property(property: 'iscritto', type: 'boolean', example: true),
+                new OA\Property(property: 'term_ids', type: 'array', items: new OA\Items(type: 'integer'), description: 'IDs dei termini di tassonomia associati'),
+                new OA\Property(property: 'privacy_accepted_at', type: 'string', format: 'date-time', nullable: true, example: '2026-05-12T10:00:00+00:00'),
+            ]
+        )
+    )]
+    #[OA\Response(
+        response: 404,
+        description: 'Lista o contatto non trovato',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'error', type: 'string', example: 'not_found'),
+                new OA\Property(property: 'message', type: 'string', example: 'Contact not found'),
+            ]
+        )
+    )]
     #[Route('/lists/{listId}/contacts/{email}', name: 'public_api_lists_contacts_find', methods: ['GET'], requirements: ['email' => '.+'])]
     public function findContact(
         int $listId,
@@ -278,11 +418,28 @@ class PublicApiController extends AbstractController
         ]);
     }
 
-    /**
-     * GET /api/public/v1/lists
-     *
-     * List all mail lists belonging to the authenticated account.
-     */
+    #[OA\Get(
+        path: '/api/public/v1/lists',
+        operationId: 'lists',
+        summary: 'Elenca le liste disponibili per l\'account',
+        description: 'Restituisce tutte le liste di iscrizione attive associate all\'account autenticato, ordinate alfabeticamente per nome.',
+        tags: ['Lists']
+    )]
+    #[OA\Response(
+        response: 200,
+        description: 'Elenco delle liste',
+        content: new OA\JsonContent(
+            type: 'array',
+            items: new OA\Items(
+                properties: [
+                    new OA\Property(property: 'id', type: 'integer', example: 1),
+                    new OA\Property(property: 'name', type: 'string', example: 'Newsletter mensile'),
+                    new OA\Property(property: 'description', type: 'string', nullable: true, example: 'Aggiornamenti mensili per i clienti'),
+                    new OA\Property(property: 'subscribe_token', type: 'string', example: 'abc123xyz'),
+                ]
+            )
+        )
+    )]
     #[Route('/lists', name: 'public_api_lists_index', methods: ['GET'])]
     public function lists(
         Request $request,
@@ -303,11 +460,39 @@ class PublicApiController extends AbstractController
         return new JsonResponse($data);
     }
 
-    /**
-     * GET /api/public/v1/lists/{listId}/privacy-policy
-     *
-     * Return the rendered privacy policy text for the given list's account.
-     */
+    #[OA\Get(
+        path: '/api/public/v1/lists/{listId}/privacy-policy',
+        operationId: 'privacyPolicy',
+        summary: 'Recupera il testo della privacy policy della lista',
+        description: 'Restituisce il testo della privacy policy dell\'account, con i placeholder sostituiti (nome azienda, email di contatto, ecc.). Se l\'account non ha una privacy policy personalizzata, viene usato il template GDPR di default.',
+        tags: ['Lists']
+    )]
+    #[OA\Parameter(
+        name: 'listId',
+        in: 'path',
+        required: true,
+        description: 'ID della lista',
+        schema: new OA\Schema(type: 'integer', example: 1)
+    )]
+    #[OA\Response(
+        response: 200,
+        description: 'Testo della privacy policy renderizzato',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'privacy_policy', type: 'string', example: 'Ai sensi del Regolamento UE 2016/679 (GDPR), la Società Esempio S.r.l. ti informa che i tuoi dati personali...'),
+            ]
+        )
+    )]
+    #[OA\Response(
+        response: 404,
+        description: 'Lista non trovata',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'error', type: 'string', example: 'not_found'),
+                new OA\Property(property: 'message', type: 'string', example: 'List not found'),
+            ]
+        )
+    )]
     #[Route('/lists/{listId}/privacy-policy', name: 'public_api_lists_privacy_policy', methods: ['GET'])]
     public function privacyPolicy(
         int $listId,
@@ -328,12 +513,48 @@ class PublicApiController extends AbstractController
         ]);
     }
 
-    /**
-     * POST /api/public/v1/campaigns
-     *
-     * Create a new campaign draft.
-     * Body JSON: { emailSubject: string, body: string, mailListIds: int[], name?: string, snippet?: string, structure?: object, taxonomyTermIds?: int[] }
-     */
+    #[OA\Post(
+        path: '/api/public/v1/campaigns',
+        operationId: 'newCampaign',
+        summary: 'Crea una nuova campagna in bozza',
+        description: 'Crea una nuova campagna email in stato draft, associata alle liste specificate. I taxonomyTermIds vengono filtrati automaticamente ai termini appartenenti alle liste indicate.',
+        tags: ['Campaigns']
+    )]
+    #[OA\RequestBody(
+        required: true,
+        content: new OA\JsonContent(
+            required: ['emailSubject', 'body', 'mailListIds'],
+            properties: [
+                new OA\Property(property: 'emailSubject', type: 'string', example: 'Offerta speciale maggio 2026'),
+                new OA\Property(property: 'body', type: 'string', example: '<h1>Ciao!</h1><p>Scopri le nostre offerte...</p>'),
+                new OA\Property(property: 'mailListIds', type: 'array', items: new OA\Items(type: 'integer'), description: 'IDs delle liste a cui inviare la campagna'),
+                new OA\Property(property: 'name', type: 'string', example: 'Campagna maggio 2026', nullable: true),
+                new OA\Property(property: 'snippet', type: 'string', example: 'Scopri le nostre offerte esclusive...', nullable: true),
+                new OA\Property(property: 'structure', type: 'object', description: 'Struttura JSON del template drag-and-drop', nullable: true),
+                new OA\Property(property: 'taxonomyTermIds', type: 'array', items: new OA\Items(type: 'integer'), description: 'Filtra i destinatari per termini di tassonomia'),
+            ]
+        )
+    )]
+    #[OA\Response(
+        response: 201,
+        description: 'Campagna creata con successo',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'campaign_id', type: 'integer', example: 10),
+                new OA\Property(property: 'status', type: 'string', example: 'draft'),
+            ]
+        )
+    )]
+    #[OA\Response(
+        response: 422,
+        description: 'Errore di validazione (campi obbligatori mancanti o lista non trovata)',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'error', type: 'string', example: 'validation_error'),
+                new OA\Property(property: 'message', type: 'string', example: 'emailSubject is required'),
+            ]
+        )
+    )]
     #[Route('/campaigns', name: 'public_api_campaigns_new', methods: ['POST'])]
     public function newCampaign(
         Request $request,
@@ -427,9 +648,51 @@ class PublicApiController extends AbstractController
         ], Response::HTTP_CREATED);
     }
 
-    /**
-     * POST /api/public/v1/campaigns/{id}/send
-     */
+    #[OA\Post(
+        path: '/api/public/v1/campaigns/{id}/send',
+        operationId: 'sendCampaign',
+        summary: 'Avvia l\'invio di una campagna',
+        description: 'Prepara e avvia l\'invio della campagna specificata. La campagna deve essere in stato draft o scheduled. Dopo la chiamata lo stato passa a sending.',
+        tags: ['Campaigns']
+    )]
+    #[OA\Parameter(
+        name: 'id',
+        in: 'path',
+        required: true,
+        description: 'ID della campagna',
+        schema: new OA\Schema(type: 'integer', example: 10)
+    )]
+    #[OA\Response(
+        response: 202,
+        description: 'Invio avviato con successo',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'campaign_id', type: 'integer', example: 10),
+                new OA\Property(property: 'status', type: 'string', example: 'sending'),
+                new OA\Property(property: 'recipients', type: 'integer', example: 1250, description: 'Numero di destinatari a cui verrà inviata la campagna'),
+            ]
+        )
+    )]
+    #[OA\Response(
+        response: 404,
+        description: 'Campagna non trovata',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'error', type: 'string', example: 'not_found'),
+                new OA\Property(property: 'message', type: 'string', example: 'Campaign not found'),
+            ]
+        )
+    )]
+    #[OA\Response(
+        response: 409,
+        description: 'Campagna già in invio o già inviata',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'error', type: 'string', example: 'invalid_state'),
+                new OA\Property(property: 'message', type: 'string', example: 'Campaign already sending or sent'),
+            ]
+        )
+    )]
     #[Route('/campaigns/{id}/send', name: 'public_api_campaigns_send', methods: ['POST'])]
     public function sendCampaign(
         int $id,
@@ -464,9 +727,51 @@ class PublicApiController extends AbstractController
         );
     }
 
-    /**
-     * GET /api/public/v1/campaigns/{id}/stats
-     */
+    #[OA\Get(
+        path: '/api/public/v1/campaigns/{id}/stats',
+        operationId: 'campaignStats',
+        summary: 'Recupera le statistiche di una campagna',
+        description: 'Restituisce le statistiche complete di una campagna: consegne, aperture, click, disiscrizioni e i relativi tassi percentuali.',
+        tags: ['Stats']
+    )]
+    #[OA\Parameter(
+        name: 'id',
+        in: 'path',
+        required: true,
+        description: 'ID della campagna',
+        schema: new OA\Schema(type: 'integer', example: 10)
+    )]
+    #[OA\Response(
+        response: 200,
+        description: 'Statistiche della campagna',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'total', type: 'integer', example: 1250),
+                new OA\Property(property: 'sent', type: 'integer', example: 1230),
+                new OA\Property(property: 'failed', type: 'integer', example: 20),
+                new OA\Property(property: 'bounced', type: 'integer', example: 15),
+                new OA\Property(property: 'unique_opens', type: 'integer', example: 430),
+                new OA\Property(property: 'total_opens', type: 'integer', example: 610),
+                new OA\Property(property: 'unique_clicks', type: 'integer', example: 120),
+                new OA\Property(property: 'total_clicks', type: 'integer', example: 185),
+                new OA\Property(property: 'unsubscribes', type: 'integer', example: 8),
+                new OA\Property(property: 'open_rate', type: 'number', format: 'float', example: 34.96),
+                new OA\Property(property: 'click_rate', type: 'number', format: 'float', example: 9.76),
+                new OA\Property(property: 'click_to_open_rate', type: 'number', format: 'float', example: 27.91),
+                new OA\Property(property: 'unsubscribe_rate', type: 'number', format: 'float', example: 0.65),
+            ]
+        )
+    )]
+    #[OA\Response(
+        response: 404,
+        description: 'Campagna non trovata',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'error', type: 'string', example: 'not_found'),
+                new OA\Property(property: 'message', type: 'string', example: 'Campaign not found'),
+            ]
+        )
+    )]
     #[Route('/campaigns/{id}/stats', name: 'public_api_campaigns_stats', methods: ['GET'])]
     public function campaignStats(
         int $id,
@@ -524,4 +829,3 @@ class PublicApiController extends AbstractController
     }
 
 }
-
