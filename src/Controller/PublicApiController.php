@@ -4,12 +4,10 @@ namespace App\Controller;
 
 use App\Entity\Account;
 use App\Entity\Campaign;
-use App\Entity\CampaignEmail;
 use App\Entity\Contact;
 use App\Entity\ContactTaxonomy;
 use App\Entity\MailList;
 use App\Entity\TaxonomyTerm;
-use App\Message\SendCampaignEmailMessage;
 use App\Repository\CampaignEmailRepository;
 use App\Repository\ContactRepository;
 use App\Repository\ContactTaxonomyRepository;
@@ -17,18 +15,16 @@ use App\Repository\LinkStatRepository;
 use App\Repository\MailListRepository;
 use App\Repository\OpenStatRepository;
 use App\Repository\UnsubscribeRequestRepository;
+use App\Service\CampaignSenderService;
 use App\Service\PrivacyPolicyService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use Oi\ApiBundle\Model\ItemDetail;
 use Ephp\MailflowBundle\Enum\CampaignEmailStatus;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Messenger\MessageBusInterface;
-use Symfony\Component\Messenger\Stamp\DelayStamp;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Serializer\SerializerInterface;
 use Symfony\Component\Validator\Constraints as Assert;
@@ -39,12 +35,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 class PublicApiController extends AbstractController
 {
     public function __construct(
-        private readonly MessageBusInterface $bus,
         private readonly ContactRepository $contactRepository,
-        #[Autowire('%ephp_mailflow.default_batch_size%')]
-        private readonly int $batchSize,
-        #[Autowire('%ephp_mailflow.default_send_interval%')]
-        private readonly int $sendInterval,
     ) {}
 
     /**
@@ -442,17 +433,13 @@ class PublicApiController extends AbstractController
 
     /**
      * POST /api/public/v1/campaigns/{id}/send
-     *
-     * Trigger sending of a campaign (or schedule it).
-     * Body: { scheduled_at?: string (ISO 8601) }
      */
     #[Route('/campaigns/{id}/send', name: 'public_api_campaigns_send', methods: ['POST'])]
     public function sendCampaign(
         int $id,
         Request $request,
         ManagerRegistry $doctrine,
-        SerializerInterface $serializer,
-        TranslatorInterface $translator,
+        CampaignSenderService $campaignSenderService,
     ): Response {
         /** @var Account $account */
         $account = $request->attributes->get('mailflow_account');
@@ -462,33 +449,23 @@ class PublicApiController extends AbstractController
         $campaign = $em->find(Campaign::class, $id);
 
         if ($campaign === null || $campaign->getAccountId() !== $account->getId()) {
-            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_found'), ItemDetail::MESSAGE_ERROR);
-            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+            return new JsonResponse(['error' => 'not_found', 'message' => 'Campaign not found'], Response::HTTP_NOT_FOUND);
         }
 
-        $scheduledAtRaw = $request->request->get('scheduled_at');
-        if ($scheduledAtRaw !== null && $scheduledAtRaw !== '') {
-            try {
-                $campaign->setScheduledAt(new \DateTime($scheduledAtRaw));
-            } catch (\Exception) {
-                $detail = new ItemDetail(null, $translator->trans('campaign.error.invalid_date'), ItemDetail::MESSAGE_ERROR);
-                return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
-            }
-        } else {
-            $campaign->setScheduledAt(null);
+        if (!in_array($campaign->getStatus(), ['draft', 'scheduled'], true)) {
+            return new JsonResponse(['error' => 'invalid_state', 'message' => 'Campaign already sending or sent'], Response::HTTP_CONFLICT);
         }
 
-        $campaign->setDraft(false);
+        $recipients = $campaignSenderService->prepareCampaign($campaign);
+        $campaignSenderService->dispatchAll($campaign);
+
+        $campaign->setStatus('sending');
         $em->flush();
 
-        $this->dispatchCampaignEmails($campaign, $em);
-
-        $message = $campaign->getScheduledAt() !== null
-            ? $translator->trans('campaign.success.scheduled')
-            : $translator->trans('campaign.success.sent');
-
-        $detail = new ItemDetail($campaign, $message);
-        return new Response($serializer->serialize($detail, 'json'));
+        return new JsonResponse(
+            ['campaign_id' => $campaign->getId(), 'status' => 'sending', 'recipients' => $recipients],
+            Response::HTTP_ACCEPTED
+        );
     }
 
     /**
@@ -578,65 +555,6 @@ class PublicApiController extends AbstractController
             }
         }
         $em->flush();
-    }
-
-    private function dispatchCampaignEmails(Campaign $campaign, EntityManagerInterface $em): void
-    {
-        $seen = [];
-        $entries = [];
-
-        foreach ($campaign->getMailLists() as $mailList) {
-            $contacts = $this->contactRepository->findSubscribedByMailList($mailList);
-            foreach ($contacts as $contact) {
-                $email = $contact->getEmail();
-                if ($email !== null && !isset($seen[$email])) {
-                    $seen[$email] = true;
-                    $entries[] = ['contact' => $contact, 'list' => $mailList];
-                }
-            }
-        }
-
-        $schedulingDelayMs = 0;
-        if ($campaign->getScheduledAt() !== null) {
-            $schedulingDelayMs = max(0, $campaign->getScheduledAt()->getTimestamp() - time()) * 1000;
-        }
-
-        $sendIntervalMs = $this->sendInterval * 1000;
-        $campaignEmails = [];
-
-        foreach ($entries as $i => $data) {
-            $campaignEmail = new CampaignEmail();
-            $campaignEmail->setCampaign($campaign);
-            $campaignEmail->setContact($data['contact']);
-            $campaignEmail->setMailList($data['list']);
-            $campaignEmail->setEmail($data['contact']->getEmail() ?? '');
-            $campaignEmail->setTrackingOpenId($this->generateUuid());
-            $em->persist($campaignEmail);
-            $campaignEmails[] = ['ce' => $campaignEmail, 'index' => $i];
-
-            if (($i + 1) % $this->batchSize === 0) {
-                $em->flush();
-            }
-        }
-        $em->flush();
-
-        foreach ($campaignEmails as $item) {
-            /** @var CampaignEmail $campaignEmail */
-            $campaignEmail = $item['ce'];
-            $i = $item['index'];
-            $batchDelayMs = (int) ($i / $this->batchSize) * $sendIntervalMs;
-            $totalDelayMs = $schedulingDelayMs + $batchDelayMs;
-            $stamps = $totalDelayMs > 0 ? [new DelayStamp($totalDelayMs)] : [];
-            $this->bus->dispatch(new SendCampaignEmailMessage($campaignEmail->getId()), $stamps);
-        }
-    }
-
-    private function generateUuid(): string
-    {
-        $data = random_bytes(16);
-        $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
-        $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
-        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
 
 }
