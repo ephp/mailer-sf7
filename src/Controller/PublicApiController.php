@@ -294,6 +294,31 @@ class PublicApiController extends AbstractController
     }
 
     /**
+     * GET /api/public/v1/lists
+     *
+     * List all mail lists belonging to the authenticated account.
+     */
+    #[Route('/lists', name: 'public_api_lists_index', methods: ['GET'])]
+    public function lists(
+        Request $request,
+        MailListRepository $mailListRepository,
+    ): Response {
+        /** @var Account $account */
+        $account = $request->attributes->get('mailflow_account');
+
+        $mailLists = $mailListRepository->findByAccount($account);
+
+        $data = array_map(static fn(MailList $l) => [
+            'id' => $l->getId(),
+            'name' => $l->getName(),
+            'description' => $l->getDescription(),
+            'subscribe_token' => $l->getSubscribeToken(),
+        ], $mailLists);
+
+        return new JsonResponse($data);
+    }
+
+    /**
      * POST /api/public/v1/campaigns
      *
      * Create a new campaign draft.
