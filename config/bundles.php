@@ -27,4 +27,5 @@ return [
     Ephp\MailflowBundle\EphpMailflowBundle::class => ['all' => true],
     Gesdinet\JWTRefreshTokenBundle\GesdinetJWTRefreshTokenBundle::class => ['all' => true],
     Oi\TagBundle\OiTagBundle::class => ['all' => true],
+    Nelmio\ApiDocBundle\NelmioApiDocBundle::class => ['all' => true],
 ];
