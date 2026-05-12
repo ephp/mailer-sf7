@@ -6,12 +6,16 @@ use App\Entity\Account;
 use App\Entity\Campaign;
 use App\Entity\CampaignEmail;
 use App\Entity\Contact;
+use App\Entity\ContactTaxonomy;
 use App\Entity\MailList;
+use App\Entity\TaxonomyTerm;
 use App\Form\CampaignType;
 use App\Message\SendCampaignEmailMessage;
 use App\Repository\CampaignEmailRepository;
 use App\Repository\ContactRepository;
+use App\Repository\ContactTaxonomyRepository;
 use App\Repository\LinkStatRepository;
+use App\Repository\MailListRepository;
 use App\Repository\OpenStatRepository;
 use App\Repository\UnsubscribeRequestRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -21,6 +25,7 @@ use Oi\ApiBundle\Service\Form\Interfaces\FormErrorMessageHandlerInterface;
 use Ephp\MailflowBundle\Enum\CampaignEmailStatus;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Messenger\MessageBusInterface;
@@ -125,6 +130,92 @@ class PublicApiController extends AbstractController
 
         $detail = new ItemDetail($contact, $message);
         return new Response($serializer->serialize($detail, 'json'), $status);
+    }
+
+    /**
+     * POST /api/public/v1/lists/{listId}/contacts
+     *
+     * Subscribe (upsert) a contact to a specific list with explicit privacy consent.
+     * Body JSON: { email, nome?, cognome?, telefono?, term_ids?: int[], privacy_accepted: boolean }
+     */
+    #[Route('/lists/{listId}/contacts', name: 'public_api_lists_contacts_subscribe', methods: ['POST'])]
+    public function subscribe(
+        int $listId,
+        Request $request,
+        ManagerRegistry $doctrine,
+        MailListRepository $mailListRepository,
+        ContactTaxonomyRepository $contactTaxonomyRepository,
+        ValidatorInterface $validator,
+    ): Response {
+        /** @var Account $account */
+        $account = $request->attributes->get('mailflow_account');
+
+        $mailList = $mailListRepository->findOneByIdAndAccount($listId, $account);
+        if ($mailList === null) {
+            return new JsonResponse(['error' => 'not_found', 'message' => 'List not found'], Response::HTTP_NOT_FOUND);
+        }
+
+        $data = json_decode($request->getContent(), true);
+        if (!is_array($data)) {
+            $data = [];
+        }
+
+        $email = trim((string) ($data['email'] ?? ''));
+        if ($email === '') {
+            return new JsonResponse(['error' => 'validation_error', 'message' => 'email is required'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $violations = $validator->validate($email, [new Assert\Email()]);
+        if (count($violations) > 0) {
+            return new JsonResponse(['error' => 'validation_error', 'message' => 'Invalid email address'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        if (($data['privacy_accepted'] ?? null) !== true) {
+            return new JsonResponse(['error' => 'subscribe.error.privacy_required', 'message' => 'Privacy acceptance is required'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $em = $doctrine->getManager();
+
+        $contact = $this->contactRepository->findByEmailAndMailList($email, $mailList);
+        $isNew = $contact === null;
+
+        if ($isNew) {
+            $contact = new Contact();
+            $contact->setEmail($email);
+            $contact->setMailList($mailList);
+            $contact->setIscritto(true);
+        } elseif (!$contact->isIscritto()) {
+            $contact->resubscribe();
+        }
+
+        if (isset($data['nome']) && (string) $data['nome'] !== '') {
+            $contact->setNome((string) $data['nome']);
+        }
+        if (isset($data['cognome']) && (string) $data['cognome'] !== '') {
+            $contact->setCognome((string) $data['cognome']);
+        }
+        if (isset($data['telefono']) && (string) $data['telefono'] !== '') {
+            $contact->setTelefono((string) $data['telefono']);
+        }
+
+        $contact->setPrivacyAcceptedAt(new \DateTime());
+
+        if ($isNew) {
+            $em->persist($contact);
+        }
+        $em->flush();
+
+        $termIds = array_values(array_filter(array_map('intval', (array) ($data['term_ids'] ?? []))));
+        if ($termIds !== []) {
+            $this->applyTermIds($contact, $mailList, $termIds, $em, $contactTaxonomyRepository);
+        }
+
+        return new JsonResponse([
+            'contact_id' => $contact->getId(),
+            'email' => $contact->getEmail(),
+            'iscritto' => $contact->isIscritto(),
+            'privacy_accepted_at' => $contact->getPrivacyAcceptedAt()?->format(\DateTimeInterface::ATOM),
+        ], $isNew ? Response::HTTP_CREATED : Response::HTTP_OK);
     }
 
     /**
@@ -274,6 +365,41 @@ class PublicApiController extends AbstractController
 
         $detail = new ItemDetail($stats);
         return new Response($serializer->serialize($detail, 'json'));
+    }
+
+    /**
+     * @param int[] $termIds
+     */
+    private function applyTermIds(
+        Contact $contact,
+        MailList $mailList,
+        array $termIds,
+        EntityManagerInterface $em,
+        ContactTaxonomyRepository $contactTaxonomyRepository,
+    ): void {
+        /** @var TaxonomyTerm[] $terms */
+        $terms = $em->createQueryBuilder()
+            ->select('t')
+            ->from(TaxonomyTerm::class, 't')
+            ->innerJoin('t.category', 'cat')
+            ->where('t.id IN (:ids)')
+            ->andWhere('cat.mailList = :list')
+            ->setParameter('ids', $termIds)
+            ->setParameter('list', $mailList)
+            ->getQuery()
+            ->getResult();
+
+        $existingTermIds = $contactTaxonomyRepository->findTermIdsByContact($contact);
+
+        foreach ($terms as $term) {
+            if (!in_array($term->getId(), $existingTermIds, true)) {
+                $ct = new ContactTaxonomy();
+                $ct->setContact($contact);
+                $ct->setTerm($term);
+                $em->persist($ct);
+            }
+        }
+        $em->flush();
     }
 
     private function dispatchCampaignEmails(Campaign $campaign, EntityManagerInterface $em): void
