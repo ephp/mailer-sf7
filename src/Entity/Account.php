@@ -86,8 +86,14 @@ class Account
     #[ORM\Column(length: 64, unique: true)]
     private string $apiKey;
 
+    #[ORM\Column(type: 'integer', options: ['default' => 60])]
+    private int $apiRateLimit = 60;
+
     #[ORM\Column(type: 'boolean', options: ['default' => true])]
     private bool $enabled = true;
+
+    #[ORM\Column(type: 'text', nullable: true)]
+    private ?string $privacyPolicy = null;
 
     #[ORM\OneToOne(targetEntity: User::class, mappedBy: 'account')]
     private ?User $user = null;
@@ -283,6 +289,18 @@ class Account
     }
 
     #[Groups(['account:read'])]
+    public function getApiRateLimit(): int
+    {
+        return $this->apiRateLimit;
+    }
+
+    public function setApiRateLimit(int $apiRateLimit): static
+    {
+        $this->apiRateLimit = $apiRateLimit;
+        return $this;
+    }
+
+    #[Groups(['account:read'])]
     public function getApiKey(): string
     {
         return $this->apiKey;
@@ -303,6 +321,18 @@ class Account
     public function setEnabled(bool $enabled): static
     {
         $this->enabled = $enabled;
+        return $this;
+    }
+
+    #[Groups(['account:read'])]
+    public function getPrivacyPolicy(): ?string
+    {
+        return $this->privacyPolicy;
+    }
+
+    public function setPrivacyPolicy(?string $privacyPolicy): static
+    {
+        $this->privacyPolicy = $privacyPolicy;
         return $this;
     }
 
