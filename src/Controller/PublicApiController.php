@@ -18,6 +18,7 @@ use App\Repository\LinkStatRepository;
 use App\Repository\MailListRepository;
 use App\Repository\OpenStatRepository;
 use App\Repository\UnsubscribeRequestRepository;
+use App\Service\PrivacyPolicyService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use Oi\ApiBundle\Model\ItemDetail;
@@ -316,6 +317,31 @@ class PublicApiController extends AbstractController
         ], $mailLists);
 
         return new JsonResponse($data);
+    }
+
+    /**
+     * GET /api/public/v1/lists/{listId}/privacy-policy
+     *
+     * Return the rendered privacy policy text for the given list's account.
+     */
+    #[Route('/lists/{listId}/privacy-policy', name: 'public_api_lists_privacy_policy', methods: ['GET'])]
+    public function privacyPolicy(
+        int $listId,
+        Request $request,
+        MailListRepository $mailListRepository,
+        PrivacyPolicyService $privacyPolicyService,
+    ): Response {
+        /** @var Account $account */
+        $account = $request->attributes->get('mailflow_account');
+
+        $mailList = $mailListRepository->findOneByIdAndAccount($listId, $account);
+        if ($mailList === null) {
+            return new JsonResponse(['error' => 'not_found', 'message' => 'List not found'], Response::HTTP_NOT_FOUND);
+        }
+
+        return new JsonResponse([
+            'privacy_policy' => $privacyPolicyService->render($account),
+        ]);
     }
 
     /**
