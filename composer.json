@@ -36,6 +36,7 @@
     "symfony/http-client": "7.4.*",
     "symfony/mailer": "7.4.*",
     "symfony/messenger": "7.4.*",
+    "symfony/rate-limiter": "7.4.*",
     "symfony/runtime": "7.4.*",
     "symfony/serializer": "7.4.*",
     "symfony/string": "7.4.*",
@@ -109,8 +110,11 @@
   ],
   "require-dev": {
     "nelmio/cors-bundle": "^2.5",
+    "phpunit/phpunit": "^11",
+    "symfony/cache": "7.4.*",
     "symfony/maker-bundle": "^1.60",
     "symfony/stopwatch": "7.4.*",
+    "symfony/test-pack": "*",
     "symfony/web-profiler-bundle": "7.4.*"
   }
 }
