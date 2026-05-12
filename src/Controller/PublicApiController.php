@@ -219,6 +219,81 @@ class PublicApiController extends AbstractController
     }
 
     /**
+     * DELETE /api/public/v1/lists/{listId}/contacts/{email}
+     *
+     * Unsubscribe a contact from a list. Idempotent: returns 404 if contact not found.
+     */
+    #[Route('/lists/{listId}/contacts/{email}', name: 'public_api_lists_contacts_unsubscribe', methods: ['DELETE'], requirements: ['email' => '.+'])]
+    public function unsubscribe(
+        int $listId,
+        string $email,
+        Request $request,
+        ManagerRegistry $doctrine,
+        MailListRepository $mailListRepository,
+    ): Response {
+        /** @var Account $account */
+        $account = $request->attributes->get('mailflow_account');
+
+        $mailList = $mailListRepository->findOneByIdAndAccount($listId, $account);
+        if ($mailList === null) {
+            return new JsonResponse(['error' => 'not_found', 'message' => 'List not found'], Response::HTTP_NOT_FOUND);
+        }
+
+        $email = urldecode($email);
+
+        $contact = $this->contactRepository->findByEmailAndMailList($email, $mailList);
+        if ($contact === null) {
+            return new JsonResponse(['error' => 'not_found', 'message' => 'Contact not found'], Response::HTTP_NOT_FOUND);
+        }
+
+        $contact->unsubscribe('api_client');
+        $doctrine->getManager()->flush();
+
+        return new Response(null, Response::HTTP_NO_CONTENT);
+    }
+
+    /**
+     * GET /api/public/v1/lists/{listId}/contacts/{email}
+     *
+     * Look up a contact's status in a list.
+     */
+    #[Route('/lists/{listId}/contacts/{email}', name: 'public_api_lists_contacts_find', methods: ['GET'], requirements: ['email' => '.+'])]
+    public function findContact(
+        int $listId,
+        string $email,
+        Request $request,
+        MailListRepository $mailListRepository,
+        ContactTaxonomyRepository $contactTaxonomyRepository,
+    ): Response {
+        /** @var Account $account */
+        $account = $request->attributes->get('mailflow_account');
+
+        $mailList = $mailListRepository->findOneByIdAndAccount($listId, $account);
+        if ($mailList === null) {
+            return new JsonResponse(['error' => 'not_found', 'message' => 'List not found'], Response::HTTP_NOT_FOUND);
+        }
+
+        $email = urldecode($email);
+
+        $contact = $this->contactRepository->findByEmailAndMailList($email, $mailList);
+        if ($contact === null) {
+            return new JsonResponse(['error' => 'not_found', 'message' => 'Contact not found'], Response::HTTP_NOT_FOUND);
+        }
+
+        $termIds = $contactTaxonomyRepository->findTermIdsByContact($contact);
+
+        return new JsonResponse([
+            'email' => $contact->getEmail(),
+            'nome' => $contact->getNome(),
+            'cognome' => $contact->getCognome(),
+            'telefono' => $contact->getTelefono(),
+            'iscritto' => $contact->isIscritto(),
+            'term_ids' => $termIds,
+            'privacy_accepted_at' => $contact->getPrivacyAcceptedAt()?->format(\DateTimeInterface::ATOM),
+        ]);
+    }
+
+    /**
      * POST /api/public/v1/campaigns
      *
      * Create a new campaign draft.
