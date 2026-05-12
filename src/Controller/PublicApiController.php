@@ -9,7 +9,6 @@ use App\Entity\Contact;
 use App\Entity\ContactTaxonomy;
 use App\Entity\MailList;
 use App\Entity\TaxonomyTerm;
-use App\Form\CampaignType;
 use App\Message\SendCampaignEmailMessage;
 use App\Repository\CampaignEmailRepository;
 use App\Repository\ContactRepository;
@@ -22,7 +21,6 @@ use App\Service\PrivacyPolicyService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use Oi\ApiBundle\Model\ItemDetail;
-use Oi\ApiBundle\Service\Form\Interfaces\FormErrorMessageHandlerInterface;
 use Ephp\MailflowBundle\Enum\CampaignEmailStatus;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -41,7 +39,6 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 class PublicApiController extends AbstractController
 {
     public function __construct(
-        private readonly FormErrorMessageHandlerInterface $formErrorMessageHandler,
         private readonly MessageBusInterface $bus,
         private readonly ContactRepository $contactRepository,
         #[Autowire('%ephp_mailflow.default_batch_size%')]
@@ -348,44 +345,99 @@ class PublicApiController extends AbstractController
      * POST /api/public/v1/campaigns
      *
      * Create a new campaign draft.
-     * Body: { campaign: { emailSubject: string, name?: string, snippet?: string, body?: string }, mail_list_ids?: int[] }
+     * Body JSON: { emailSubject: string, body: string, mailListIds: int[], name?: string, snippet?: string, structure?: object, taxonomyTermIds?: int[] }
      */
     #[Route('/campaigns', name: 'public_api_campaigns_new', methods: ['POST'])]
     public function newCampaign(
         Request $request,
         ManagerRegistry $doctrine,
-        SerializerInterface $serializer,
-        TranslatorInterface $translator,
+        MailListRepository $mailListRepository,
     ): Response {
         /** @var Account $account */
         $account = $request->attributes->get('mailflow_account');
 
-        $data = $request->request->all();
-        $campaignData = $data['campaign'] ?? $data;
+        $data = json_decode($request->getContent(), true);
+        if (!is_array($data)) {
+            $data = [];
+        }
 
-        $campaign = new Campaign();
-        $campaign->setAccount($account);
+        $emailSubject = trim((string) ($data['emailSubject'] ?? ''));
+        if ($emailSubject === '') {
+            return new JsonResponse(['error' => 'validation_error', 'message' => 'emailSubject is required'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
-        $form = $this->createForm(CampaignType::class, $campaign);
-        $form->submit($campaignData);
+        $body = trim((string) ($data['body'] ?? ''));
+        if ($body === '') {
+            return new JsonResponse(['error' => 'validation_error', 'message' => 'body is required'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
-        if (!$form->isSubmitted() || !$form->isValid()) {
-            $detail = new ItemDetail(
-                null,
-                $this->formErrorMessageHandler->getErrorMessageFromForm($form),
-                ItemDetail::MESSAGE_ERROR,
-            );
-            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
+        $mailListIds = array_values(array_filter(array_map('intval', (array) ($data['mailListIds'] ?? []))));
+        if ($mailListIds === []) {
+            return new JsonResponse(['error' => 'validation_error', 'message' => 'mailListIds is required and must be non-empty'], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         $em = $doctrine->getManager();
-        $this->syncMailLists($campaign, $data['mail_list_ids'] ?? [], $account, $em);
+        $mailLists = [];
+        foreach ($mailListIds as $listId) {
+            $mailList = $mailListRepository->findOneByIdAndAccount($listId, $account);
+            if ($mailList === null) {
+                return new JsonResponse(['error' => 'validation_error', 'message' => sprintf('Mail list %d not found', $listId)], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+            $mailLists[] = $mailList;
+        }
+
+        $taxonomyTermIds = array_values(array_filter(array_map('intval', (array) ($data['taxonomyTermIds'] ?? []))));
+        $filteredTermIds = [];
+        if ($taxonomyTermIds !== []) {
+            $filteredTermIds = array_column(
+                $em->createQueryBuilder()
+                    ->select('t.id')
+                    ->from(TaxonomyTerm::class, 't')
+                    ->innerJoin('t.category', 'cat')
+                    ->where('t.id IN (:ids)')
+                    ->andWhere('cat.mailList IN (:lists)')
+                    ->setParameter('ids', $taxonomyTermIds)
+                    ->setParameter('lists', $mailLists)
+                    ->getQuery()
+                    ->getArrayResult(),
+                'id',
+            );
+        }
+
+        $campaign = new Campaign();
+        $campaign->setAccount($account);
+        $campaign->setEmailSubject($emailSubject);
+        $campaign->setBody($body);
+
+        $name = trim((string) ($data['name'] ?? ''));
+        if ($name !== '') {
+            $campaign->setName($name);
+        }
+
+        $snippet = trim((string) ($data['snippet'] ?? ''));
+        if ($snippet !== '') {
+            $campaign->setSnippet($snippet);
+        }
+
+        if (isset($data['structure']) && is_array($data['structure'])) {
+            $campaign->setStructure($data['structure']);
+        }
+
+        if ($filteredTermIds !== []) {
+            $campaign->setFilter(['taxonomyTermIds' => $filteredTermIds]);
+        }
+
+        foreach ($mailLists as $mailList) {
+            $campaign->getMailLists()->add($mailList);
+        }
 
         $em->persist($campaign);
         $em->flush();
 
-        $detail = new ItemDetail($campaign, $translator->trans('campaign.success.created'));
-        return new Response($serializer->serialize($detail, 'json'), Response::HTTP_CREATED);
+        return new JsonResponse([
+            'campaign_id' => $campaign->getId(),
+            'status' => $campaign->getStatus(),
+        ], Response::HTTP_CREATED);
     }
 
     /**
@@ -587,20 +639,5 @@ class PublicApiController extends AbstractController
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
 
-    private function syncMailLists(
-        Campaign $campaign,
-        array $listIds,
-        Account $account,
-        EntityManagerInterface $em,
-    ): void {
-        $collection = $campaign->getMailLists();
-        $collection->clear();
-
-        foreach ($listIds as $listId) {
-            $mailList = $em->find(MailList::class, (int) $listId);
-            if ($mailList !== null && $mailList->getAccountId() === $account->getId()) {
-                $collection->add($mailList);
-            }
-        }
-    }
 }
+
