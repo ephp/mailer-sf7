@@ -24,13 +24,94 @@ class LinkStatRepository extends ServiceEntityRepository
 
     public function countUniqueByCampaign(Campaign $campaign): int
     {
+        // Only count link_stat rows that were *actually clicked* (count > 0).
+        // A LinkStat is created at send time for every <a href> in the email
+        // body, so without this filter we would count every recipient who
+        // received a link, not those who clicked it.
         return (int) $this->createQueryBuilder('ls')
             ->select('COUNT(DISTINCT IDENTITY(ls.campaignEmail))')
             ->innerJoin('ls.campaignEmail', 'ce')
             ->where('ce.campaign = :campaign')
+            ->andWhere('ls.count > 0')
             ->setParameter('campaign', $campaign)
             ->getQuery()
             ->getSingleScalarResult();
+    }
+
+    /**
+     * @param int[] $contactIds
+     * @return array<int, int> map contactId => count of campaign_email rows with at least one link click
+     */
+    public function countClickedByContactIds(array $contactIds): array
+    {
+        if ($contactIds === []) {
+            return [];
+        }
+        $rows = $this->createQueryBuilder('ls')
+            ->select('IDENTITY(ce.contact) AS cid, COUNT(DISTINCT IDENTITY(ls.campaignEmail)) AS c')
+            ->innerJoin('ls.campaignEmail', 'ce')
+            ->where('ce.contact IN (:ids)')
+            ->andWhere('ls.count > 0')
+            ->setParameter('ids', $contactIds)
+            ->groupBy('ce.contact')
+            ->getQuery()
+            ->getArrayResult();
+        $map = [];
+        foreach ($rows as $r) {
+            $map[(int) $r['cid']] = (int) $r['c'];
+        }
+        return $map;
+    }
+
+    /**
+     * @param int[] $mailListIds
+     * @return array<int, int> map mailListId => unique clicks count (count>0)
+     */
+    public function countUniqueByMailListIds(array $mailListIds): array
+    {
+        if ($mailListIds === []) {
+            return [];
+        }
+        $conn = $this->getEntityManager()->getConnection();
+        $placeholders = implode(',', array_fill(0, count($mailListIds), '?'));
+        $sql = "SELECT cml.mail_list_id AS lid, COUNT(DISTINCT ls.campaign_email_id) AS c
+                FROM link_stat ls
+                INNER JOIN campaign_email ce ON ce.id = ls.campaign_email_id
+                INNER JOIN campaign_mail_list cml ON cml.campaign_id = ce.campaign_id
+                WHERE cml.mail_list_id IN ($placeholders)
+                  AND ls.count > 0
+                GROUP BY cml.mail_list_id";
+        $rows = $conn->executeQuery($sql, array_values($mailListIds))->fetchAllAssociative();
+        $map = [];
+        foreach ($rows as $r) {
+            $map[(int) $r['lid']] = (int) $r['c'];
+        }
+        return $map;
+    }
+
+    /**
+     * @param int[] $campaignIds
+     * @return array<int, int> map campaignId => unique clicks count
+     */
+    public function countUniqueByCampaignIds(array $campaignIds): array
+    {
+        if ($campaignIds === []) {
+            return [];
+        }
+        $rows = $this->createQueryBuilder('ls')
+            ->select('IDENTITY(ce.campaign) AS cid, COUNT(DISTINCT IDENTITY(ls.campaignEmail)) AS c')
+            ->innerJoin('ls.campaignEmail', 'ce')
+            ->where('ce.campaign IN (:ids)')
+            ->andWhere('ls.count > 0')
+            ->setParameter('ids', $campaignIds)
+            ->groupBy('ce.campaign')
+            ->getQuery()
+            ->getArrayResult();
+        $map = [];
+        foreach ($rows as $r) {
+            $map[(int) $r['cid']] = (int) $r['c'];
+        }
+        return $map;
     }
 
     public function countUniqueByAccount(\App\Entity\Account $account): int
@@ -40,6 +121,7 @@ class LinkStatRepository extends ServiceEntityRepository
             ->innerJoin('ls.campaignEmail', 'ce')
             ->innerJoin('ce.campaign', 'c')
             ->where('c.account = :account')
+            ->andWhere('ls.count > 0')
             ->setParameter('account', $account)
             ->getQuery()
             ->getSingleScalarResult();
@@ -51,6 +133,7 @@ class LinkStatRepository extends ServiceEntityRepository
             ->select('COUNT(DISTINCT IDENTITY(ls.campaignEmail))')
             ->innerJoin('ls.campaignEmail', 'ce')
             ->where('ce.mailList = :mailList')
+            ->andWhere('ls.count > 0')
             ->setParameter('mailList', $mailList)
             ->getQuery()
             ->getSingleScalarResult();
@@ -139,6 +222,7 @@ class LinkStatRepository extends ServiceEntityRepository
              FROM link_stat ls
              INNER JOIN campaign_email ce ON ls.campaign_email_id = ce.id
              WHERE ce.campaign_id = :campaign_id
+               AND ls.count > 0
              GROUP BY ls.url
              ORDER BY total_clicks DESC',
             ['campaign_id' => $campaign->getId()]

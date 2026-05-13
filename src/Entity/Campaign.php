@@ -31,9 +31,43 @@ class Campaign extends BaseCampaign
     #[ORM\JoinTable(name: 'campaign_mail_list')]
     private Collection $mailLists;
 
+    /**
+     * Transient fields populated by the controller when building the list
+     * payload — they are NOT persisted, NOT ORM-mapped, and only filled when
+     * the API caller asked for stats.
+     */
+    private ?int $statsSent = null;
+    private ?int $statsUniqueOpens = null;
+    private ?int $statsUniqueClicks = null;
+
     public function __construct()
     {
         $this->mailLists = new ArrayCollection();
+    }
+
+    public function setStats(int $sent, int $uniqueOpens, int $uniqueClicks): void
+    {
+        $this->statsSent = $sent;
+        $this->statsUniqueOpens = $uniqueOpens;
+        $this->statsUniqueClicks = $uniqueClicks;
+    }
+
+    #[Groups(['campaign:read'])]
+    public function getStatsSent(): ?int
+    {
+        return $this->statsSent;
+    }
+
+    #[Groups(['campaign:read'])]
+    public function getStatsUniqueOpens(): ?int
+    {
+        return $this->statsUniqueOpens;
+    }
+
+    #[Groups(['campaign:read'])]
+    public function getStatsUniqueClicks(): ?int
+    {
+        return $this->statsUniqueClicks;
     }
 
     #[Groups(['campaign:read'])]
@@ -166,6 +200,30 @@ class Campaign extends BaseCampaign
     public function getMailListNames(): array
     {
         return array_values($this->mailLists->map(fn(MailList $ml) => ['id' => $ml->getId(), 'name' => $ml->getName()])->toArray());
+    }
+
+    /**
+     * Transient list of attachment payloads, populated by CampaignController
+     * actions that need to expose them. Not ORM-mapped.
+     * @var array<int, array{id:int, filename:string, size:int, mimetype:?string, url:string}>
+     */
+    private array $attachmentsPayload = [];
+
+    /**
+     * @param array<int, array{id:int, filename:string, size:int, mimetype:?string, url:string}> $attachments
+     */
+    public function setAttachmentsPayload(array $attachments): void
+    {
+        $this->attachmentsPayload = $attachments;
+    }
+
+    /**
+     * @return array<int, array{id:int, filename:string, size:int, mimetype:?string, url:string}>
+     */
+    #[Groups(['campaign:read'])]
+    public function getAttachments(): array
+    {
+        return $this->attachmentsPayload;
     }
 
     #[Groups(['campaign:read'])]

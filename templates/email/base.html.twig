@@ -4,20 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta http-equiv="Content-Language" content="it">
   <title>{{ subject }}</title>
+  {% if googleFontsUrl %}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="{{ googleFontsUrl }}">
+  {% endif %}
+  {# Only @media rules go in <style>: most clients (Gmail, Outlook) strip <style> blocks
+     or unbind classes. Element-level styles below are inlined for that reason. #}
   <style>
-    body { margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, Helvetica, sans-serif; }
-    table { border-collapse: collapse; }
-    img { border: 0; display: block; max-width: 100%; }
-    a { color: {{ primaryColor }}; text-decoration: none; }
-    .email-wrapper { width: 100%; background-color: #f4f4f4; padding: 20px 0; }
-    .email-container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
-    .email-header { background-color: {{ primaryColor }}; padding: 24px 32px; text-align: center; }
-    .email-header img { max-height: 48px; margin: 0 auto; }
-    .email-header-text { color: #ffffff; font-size: 22px; font-weight: bold; margin: 0; }
-    .email-body { padding: 32px; color: {{ textColor }}; font-size: 15px; line-height: 1.6; }
-    .email-footer { background-color: #f0f0f0; padding: 20px 32px; text-align: center; font-size: 12px; color: #888888; border-top: 1px solid #e0e0e0; }
-    .email-footer a { color: #888888; text-decoration: underline; }
     @media only screen and (max-width: 600px) {
       .email-container { width: 100% !important; }
       .email-body { padding: 20px 16px !important; }
@@ -26,28 +22,45 @@
     }
   </style>
 </head>
-<body>
-  <div class="email-wrapper">
-    <table class="email-container" width="600" cellpadding="0" cellspacing="0" align="center">
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:'{{ bodyFont }}',Arial,Helvetica,sans-serif;">
+  {% if preheader is defined and preheader %}
+    <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;color:#f4f4f4;mso-hide:all;">{{ preheader }}</div>
+  {% endif %}
+  <div class="email-wrapper" style="width:100%;background-color:#f4f4f4;padding:20px 0;">
+    {% if webViewUrl %}
+      <div style="max-width:600px;margin:0 auto 8px;text-align:center;font-size:11px;color:#999999;font-family:'{{ bodyFont }}',Arial,Helvetica,sans-serif;">
+        Non visualizzi questa email correttamente?
+        <a href="{{ webViewUrl }}" style="color:#999999;text-decoration:underline;display:inline-flex;align-items:center;gap:6px;">
+          {% if openTrackingUrl %}<img src="{{ openTrackingUrl }}" height="16" border="0" alt="" style="border:0;vertical-align:middle;height:16px;width:auto;">{% endif %}
+          Aprila nel browser
+        </a>
+      </div>
+    {% endif %}
+    <table class="email-container" width="600" cellpadding="0" cellspacing="0" align="center" style="max-width:600px;margin:0 auto;background-color:#ffffff;border-collapse:collapse;">
       <tr>
-        <td class="email-header">
+        <td class="email-header" style="background-color:{{ primaryColor }};padding:24px 32px;text-align:center;">
           {% if logo %}
-            <img src="{{ logo }}" alt="{{ account.ragioneSociale }}" style="max-height:48px;margin:0 auto;">
+            <img src="{{ logo }}" alt="{{ account.ragioneSociale }}" style="max-height:48px;margin:0 auto;border:0;display:block;">
           {% else %}
-            <p class="email-header-text">{{ account.ragioneSociale }}</p>
+            <p class="email-header-text" style="color:{{ onPrimaryColor }};font-size:22px;font-weight:bold;margin:0;font-family:'{{ headingFont }}',Arial,Helvetica,sans-serif;">{{ account.ragioneSociale }}</p>
           {% endif %}
         </td>
       </tr>
       <tr>
-        <td class="email-body">
+        <td class="email-body" style="padding:32px;color:{{ textColor }};font-size:15px;line-height:1.6;font-family:'{{ bodyFont }}',Arial,Helvetica,sans-serif;">
           {% block email_body %}{% endblock %}
+          {% if signature %}
+            <div style="margin-top:32px;padding-top:16px;border-top:1px solid #e0e0e0;color:{{ textColor }};font-size:14px;line-height:1.5;">
+              {{ signature|raw }}
+            </div>
+          {% endif %}
         </td>
       </tr>
       <tr>
-        <td class="email-footer">
+        <td class="email-footer" style="background-color:#f0f0f0;padding:20px 32px;text-align:center;font-size:12px;color:#888888;border-top:1px solid #e0e0e0;font-family:'{{ bodyFont }}',Arial,Helvetica,sans-serif;">
           <p style="margin:0 0 8px;">{{ account.ragioneSociale }}</p>
           {% if unsubscribeUrl %}
-            <p style="margin:0;"><a href="{{ unsubscribeUrl }}">Disiscriviti</a></p>
+            <p style="margin:0;"><a href="{{ unsubscribeUrl }}" style="color:#888888;text-decoration:underline;">Disiscriviti</a></p>
           {% endif %}
         </td>
       </tr>

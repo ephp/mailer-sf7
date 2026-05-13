@@ -35,7 +35,8 @@ class AccountType extends AbstractType
                     'SSL' => 'ssl',
                     'None' => 'none',
                 ],
-            ]);
+            ])
+            ->add('privacyPolicy', TextareaType::class, ['required' => false]);
     }
 
     public function configureOptions(OptionsResolver $resolver): void

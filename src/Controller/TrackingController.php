@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Entity\CampaignEmail;
+use App\Entity\LinkClickEvent;
 use App\Entity\OpenStat;
 use App\Entity\UnsubscribeRequest;
 use App\Repository\LinkStatRepository;
@@ -11,6 +12,7 @@ use App\Repository\UnsubscribeRequestRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -20,11 +22,9 @@ use Symfony\Component\Routing\Attribute\Route;
 
 class TrackingController extends AbstractController
 {
-    // 1x1 transparent PNG
-    private const PIXEL_PNG = "\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00\x00\x00\x0d\x49\x48\x44\x52\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\x0a\x49\x44\x41\x54\x78\x9c\x62\x00\x01\x00\x00\x05\x00\x01\x0d\x0a\x2d\xb4\x00\x00\x00\x00\x49\x45\x4e\x44\xae\x42\x60\x82";
-
     public function __construct(
         #[Autowire('%app_url%')] private readonly string $appUrl,
+        #[Autowire('%kernel.project_dir%')] private readonly string $projectDir,
     ) {}
 
     #[Route('/t/open/{uuid}', name: 'tracking_open', methods: ['GET'])]
@@ -36,23 +36,22 @@ class TrackingController extends AbstractController
         RateLimiterFactory $trackingOpenLimiter,
         LoggerInterface $logger,
     ): Response {
-        $pixelResponse = new Response(
-            self::PIXEL_PNG,
-            Response::HTTP_OK,
-            [
-                'Content-Type' => 'image/png',
-                'Cache-Control' => 'no-cache, no-store, must-revalidate',
-                'Pragma' => 'no-cache',
-                'Expires' => '0',
-            ]
-        );
+        $buildPixelResponse = function (): BinaryFileResponse {
+            $response = new BinaryFileResponse($this->projectDir . '/public/img/email.png');
+            $response->headers->set('Content-Type', 'image/png');
+            $response->headers->set('Cache-Control', 'no-cache, no-store, must-revalidate');
+            $response->headers->set('Pragma', 'no-cache');
+            $response->headers->set('Expires', '0');
+            return $response;
+        };
 
         $limit = $trackingOpenLimiter->create($request->getClientIp() ?? 'unknown')->consume();
         if (!$limit->isAccepted()) {
             $logger->info('Rate limit hit: tracking_open', ['ip' => $request->getClientIp()]);
             $retryAfter = max(0, $limit->getRetryAfter()->getTimestamp() - time());
-            $pixelResponse->headers->set('Retry-After', (string) $retryAfter);
-            return $pixelResponse;
+            $response = $buildPixelResponse();
+            $response->headers->set('Retry-After', (string) $retryAfter);
+            return $response;
         }
 
         $campaignEmail = $em->getRepository(CampaignEmail::class)->findOneBy(['trackingOpenId' => $uuid]);
@@ -60,7 +59,7 @@ class TrackingController extends AbstractController
         if ($campaignEmail !== null) {
             $openStat = $openStatRepository->findOneByCampaignEmail($campaignEmail);
             if ($openStat === null) {
-                $openStat = new OpenStat(new \DateTimeImmutable());
+                $openStat = new OpenStat(new \DateTime());
                 $openStat->setCampaignEmail($campaignEmail);
                 $em->persist($openStat);
             } else {
@@ -69,7 +68,24 @@ class TrackingController extends AbstractController
             $em->flush();
         }
 
-        return $pixelResponse;
+        return $buildPixelResponse();
+    }
+
+    #[Route('/v/{uuid}', name: 'tracking_web_view', methods: ['GET'])]
+    public function webView(
+        string $uuid,
+        EntityManagerInterface $em,
+    ): Response {
+        $campaignEmail = $em->getRepository(CampaignEmail::class)->findOneBy(['trackingOpenId' => $uuid]);
+
+        if ($campaignEmail === null || $campaignEmail->getHtml() === null) {
+            return $this->render('email/web_view_not_found.html.twig', [], new Response(status: Response::HTTP_NOT_FOUND));
+        }
+
+        return new Response($campaignEmail->getHtml(), Response::HTTP_OK, [
+            'Content-Type' => 'text/html; charset=UTF-8',
+            'X-Robots-Tag' => 'noindex, nofollow',
+        ]);
     }
 
     #[Route('/t/click/{token}', name: 'tracking_click', methods: ['GET'])]
@@ -88,19 +104,74 @@ class TrackingController extends AbstractController
             return new RedirectResponse($this->appUrl . '/', Response::HTTP_FOUND);
         }
 
-        $limit = $trackingClickLimiter->create($request->getClientIp() ?? 'unknown')->consume();
+        $userAgent = $request->headers->get('User-Agent', '');
+        $ipAddress = $request->getClientIp();
+
+        $event = new LinkClickEvent();
+        $event->setLinkStat($linkStat);
+        $event->setIpAddress($ipAddress);
+        $event->setUserAgent($userAgent !== '' ? $userAgent : null);
+
+        $limit = $trackingClickLimiter->create($ipAddress ?? 'unknown')->consume();
         if (!$limit->isAccepted()) {
-            $logger->info('Rate limit hit: tracking_click', ['ip' => $request->getClientIp()]);
+            $logger->info('Rate limit hit: tracking_click', ['ip' => $ipAddress]);
+            $event->setCounted(false);
+            $event->setSkipReason('rate_limit');
+            $em->persist($event);
+            $em->flush();
             $response = new RedirectResponse($linkStat->getUrl(), Response::HTTP_FOUND);
             $retryAfter = max(0, $limit->getRetryAfter()->getTimestamp() - time());
             $response->headers->set('Retry-After', (string) $retryAfter);
             return $response;
         }
 
+        // Skip counting clicks from known prefetchers / link scanners (Gmail
+        // image proxy, Outlook Safe Links, Mimecast, Proofpoint, etc.). They
+        // hit our redirect to scan the destination, not because a human
+        // clicked. Still serve the redirect, so a real human request behind
+        // the same UA filter is not broken.
+        $scannerReason = $this->matchScannerPattern($userAgent);
+        if ($scannerReason !== null) {
+            $logger->info('Click tracking: scanner UA, not counting', ['ua' => $userAgent, 'reason' => $scannerReason]);
+            $event->setCounted(false);
+            $event->setSkipReason($scannerReason);
+            $em->persist($event);
+            $em->flush();
+            return new RedirectResponse($linkStat->getUrl(), Response::HTTP_FOUND);
+        }
+
         $linkStat->incrementCount();
+        $em->persist($event);
         $em->flush();
 
         return new RedirectResponse($linkStat->getUrl(), Response::HTTP_FOUND);
+    }
+
+    /**
+     * Returns the pattern name matched (truncated to fit skip_reason column)
+     * if the UA looks like a prefetcher/scanner, or null for a real client.
+     */
+    private function matchScannerPattern(string $userAgent): ?string
+    {
+        if ($userAgent === '') {
+            return 'empty_ua';
+        }
+        $patterns = [
+            'bot', 'crawler', 'spider', 'scanner', 'monitor',
+            'GoogleImageProxy', 'YahooMailProxy',
+            'Mimecast', 'Proofpoint', 'Barracuda', 'IronPort',
+            'OutlookSafeLink', 'safelinks', 'urldefense',
+            'BingPreview', 'Slackbot', 'facebookexternalhit',
+            'Twitterbot', 'LinkedInBot', 'WhatsApp', 'TelegramBot',
+            'curl', 'wget', 'python-requests',
+            'PhantomJS', 'HeadlessChrome',
+        ];
+        foreach ($patterns as $needle) {
+            if (stripos($userAgent, $needle) !== false) {
+                return substr('ua:' . $needle, 0, 64);
+            }
+        }
+        return null;
     }
 
     #[Route('/unsubscribe/{uuid}', name: 'tracking_unsubscribe', methods: ['GET'])]
@@ -169,14 +240,14 @@ class TrackingController extends AbstractController
             return $this->render('unsubscribe/already_done.html.twig');
         }
 
-        $unsubscribeRequest = new UnsubscribeRequest(new \DateTimeImmutable());
+        $unsubscribeRequest = new UnsubscribeRequest(new \DateTime());
         $unsubscribeRequest->setCampaignEmail($campaignEmail);
         $unsubscribeRequest->setIpAddress($request->getClientIp());
         $em->persist($unsubscribeRequest);
 
         $contact = $campaignEmail->getContact();
         if ($contact !== null) {
-            $contact->unsubscribe();
+            $contact->unsubscribe('user_request');
         }
 
         $em->flush();

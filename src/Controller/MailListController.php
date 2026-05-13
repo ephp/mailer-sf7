@@ -4,8 +4,12 @@ namespace App\Controller;
 
 use App\Entity\MailList;
 use App\Form\MailListType;
+use App\Repository\CampaignEmailRepository;
 use App\Repository\CampaignRepository;
+use App\Repository\ContactRepository;
+use App\Repository\LinkStatRepository;
 use App\Repository\MailListRepository;
+use App\Repository\OpenStatRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use Knp\Component\Pager\PaginatorInterface;
 use Oi\ApiBundle\Model\ItemDetail;
@@ -29,11 +33,16 @@ class MailListController extends AbstractController
     #[Route('/lists', name: 'maillist_index', methods: ['GET'])]
     #[IsGranted('ROLE_USER')]
     public function index(
-        Request             $request,
-        MailListRepository  $mailListRepository,
-        PaginatorInterface  $paginator,
-        SerializerInterface $serializer,
-        TranslatorInterface $translator,
+        Request                  $request,
+        MailListRepository       $mailListRepository,
+        CampaignRepository       $campaignRepository,
+        CampaignEmailRepository  $campaignEmailRepository,
+        ContactRepository        $contactRepository,
+        OpenStatRepository       $openStatRepository,
+        LinkStatRepository       $linkStatRepository,
+        PaginatorInterface       $paginator,
+        SerializerInterface      $serializer,
+        TranslatorInterface      $translator,
     ): Response {
         /** @var \App\Entity\User $user */
         $user = $this->getUser();
@@ -56,6 +65,28 @@ class MailListController extends AbstractController
             $request->query->getInt('per_page', 20),
             ['sortFieldParameterName' => '_disabled_sort'],
         );
+
+        /** @var MailList[] $items */
+        $items = iterator_to_array($pagination);
+        $ids = array_values(array_filter(array_map(fn(MailList $ml) => $ml->getId(), $items)));
+        if ($ids !== []) {
+            $campaignsSentMap = $campaignRepository->countSentByMailListIds($ids);
+            $emailsSentMap = $campaignEmailRepository->countByMailListIdsAndStatus($ids, \Ephp\MailflowBundle\Enum\CampaignEmailStatus::Sent);
+            $opensMap = $openStatRepository->countUniqueByMailListIds($ids);
+            $clicksMap = $linkStatRepository->countUniqueByMailListIds($ids);
+            [$totalMap, $activeMap] = $contactRepository->countsByMailListIds($ids);
+            foreach ($items as $ml) {
+                $lid = (int) $ml->getId();
+                $ml->setStats(
+                    $campaignsSentMap[$lid] ?? 0,
+                    $totalMap[$lid] ?? 0,
+                    $activeMap[$lid] ?? 0,
+                    $emailsSentMap[$lid] ?? 0,
+                    $opensMap[$lid] ?? 0,
+                    $clicksMap[$lid] ?? 0,
+                );
+            }
+        }
 
         return new Response($serializer->serialize(new PaginatedList($pagination), 'json', ['groups' => ['list:read']]));
     }

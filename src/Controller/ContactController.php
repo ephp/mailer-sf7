@@ -34,6 +34,9 @@ class ContactController extends AbstractController
         PaginatorInterface  $paginator,
         SerializerInterface $serializer,
         TranslatorInterface $translator,
+        \App\Repository\CampaignEmailRepository $campaignEmailRepository,
+        \App\Repository\OpenStatRepository $openStatRepository,
+        \App\Repository\LinkStatRepository $linkStatRepository,
     ): Response {
         $mailList = $this->findMailListForUser($listId, $doctrine, $translator, $serializer);
         if ($mailList instanceof Response) {
@@ -57,7 +60,48 @@ class ContactController extends AbstractController
             $request->query->getInt('per_page', 20),
         );
 
+        /** @var Contact[] $items */
+        $items = iterator_to_array($pagination);
+        $ids = array_values(array_filter(array_map(fn(Contact $c) => $c->getId(), $items)));
+        if ($ids !== []) {
+            $bfMap = $campaignEmailRepository->countBouncedOrFailedByContactIds($ids);
+            $sentMap = $campaignEmailRepository->countSentByContactIds($ids);
+            $openedMap = $openStatRepository->countOpenedByContactIds($ids);
+            $clickedMap = $linkStatRepository->countClickedByContactIds($ids);
+            foreach ($items as $c) {
+                $cid = (int) $c->getId();
+                $c->setBouncedFailedCount($bfMap[$cid] ?? 0);
+                $c->setSentCount($sentMap[$cid] ?? 0);
+                $c->setOpenedCount($openedMap[$cid] ?? 0);
+                $c->setClickedCount($clickedMap[$cid] ?? 0);
+            }
+        }
+
         return new Response($serializer->serialize(new PaginatedList($pagination), 'json'));
+    }
+
+    #[Route('/lists/{listId}/contacts/{id}/bounces', name: 'contact_bounces', methods: ['GET'])]
+    #[IsGranted('ROLE_USER')]
+    public function bounces(
+        int                 $listId,
+        int                 $id,
+        ManagerRegistry     $doctrine,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+        \App\Repository\CampaignEmailRepository $campaignEmailRepository,
+    ): Response {
+        $mailList = $this->findMailListForUser($listId, $doctrine, $translator, $serializer);
+        if ($mailList instanceof Response) {
+            return $mailList;
+        }
+
+        $contact = $this->findContactForMailList($id, $mailList, $doctrine, $translator, $serializer);
+        if ($contact instanceof Response) {
+            return $contact;
+        }
+
+        $items = $campaignEmailRepository->findBouncedOrFailedByContact($contact);
+        return new Response($serializer->serialize(new ItemDetail($items), 'json'));
     }
 
     #[Route('/lists/{listId}/contacts/{id}', name: 'contact_find', methods: ['GET'])]

@@ -31,6 +31,11 @@ class CampaignUpdateType extends AbstractType
             'data_class' => Campaign::class,
             'csrf_protection' => false,
             'allow_extra_fields' => true,
+            // A draft is being progressively built across the wizard steps, so
+            // entity-level constraints (e.g. emailSubject NotBlank) shouldn't
+            // block partial saves. The send endpoint validates required fields
+            // explicitly before dispatching.
+            'validation_groups' => false,
         ]);
     }
 

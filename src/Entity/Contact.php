@@ -42,12 +42,67 @@ class Contact
     #[ORM\Column(type: 'datetime', nullable: true)]
     private ?\DateTime $dataDisiscrizione = null;
 
+    #[ORM\Column(type: 'text', nullable: true)]
+    private ?string $unsubscribeReason = null;
+
     #[ORM\Column(type: 'integer', options: ['default' => 0])]
     private int $bounceCount = 0;
+
+    #[ORM\Column(type: 'datetime', nullable: true)]
+    private ?\DateTime $privacyAcceptedAt = null;
 
     #[ORM\ManyToOne(targetEntity: MailList::class, inversedBy: 'contacts')]
     #[ORM\JoinColumn(name: 'mail_list_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
     private ?MailList $mailList = null;
+
+    /**
+     * Transient counters populated by ContactController::index on the current
+     * page. Null when not yet computed (e.g. on the single-find route).
+     */
+    private ?int $bouncedFailedCount = null;
+    private ?int $sentCount = null;
+    private ?int $openedCount = null;
+    private ?int $clickedCount = null;
+
+    public function setBouncedFailedCount(int $n): void
+    {
+        $this->bouncedFailedCount = $n;
+    }
+
+    public function getBouncedFailedCount(): ?int
+    {
+        return $this->bouncedFailedCount;
+    }
+
+    public function setSentCount(int $n): void
+    {
+        $this->sentCount = $n;
+    }
+
+    public function getSentCount(): ?int
+    {
+        return $this->sentCount;
+    }
+
+    public function setOpenedCount(int $n): void
+    {
+        $this->openedCount = $n;
+    }
+
+    public function getOpenedCount(): ?int
+    {
+        return $this->openedCount;
+    }
+
+    public function setClickedCount(int $n): void
+    {
+        $this->clickedCount = $n;
+    }
+
+    public function getClickedCount(): ?int
+    {
+        return $this->clickedCount;
+    }
 
     public function getId(): ?int
     {
@@ -120,10 +175,29 @@ class Contact
         return $this;
     }
 
-    public function unsubscribe(): void
+    public function unsubscribe(?string $reason = null): void
     {
         $this->iscritto = false;
         $this->dataDisiscrizione = new \DateTime();
+        $this->unsubscribeReason = $reason;
+    }
+
+    public function resubscribe(): void
+    {
+        $this->iscritto = true;
+        $this->dataDisiscrizione = null;
+        $this->unsubscribeReason = null;
+    }
+
+    public function getUnsubscribeReason(): ?string
+    {
+        return $this->unsubscribeReason;
+    }
+
+    public function setUnsubscribeReason(?string $unsubscribeReason): static
+    {
+        $this->unsubscribeReason = $unsubscribeReason;
+        return $this;
     }
 
     public function getBounceCount(): int
@@ -140,6 +214,17 @@ class Contact
     public function incrementBounceCount(): void
     {
         ++$this->bounceCount;
+    }
+
+    public function getPrivacyAcceptedAt(): ?\DateTime
+    {
+        return $this->privacyAcceptedAt;
+    }
+
+    public function setPrivacyAcceptedAt(?\DateTime $privacyAcceptedAt): static
+    {
+        $this->privacyAcceptedAt = $privacyAcceptedAt;
+        return $this;
     }
 
     #[Ignore]

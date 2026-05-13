@@ -133,7 +133,19 @@ class AccountController extends AbstractController
         }
 
         try {
-            $upload = $fileHandler->makeUploadFromUploadedFile($file, $request);
+            // The OiFileBundle uses the file path to compute the public URL
+            // (it looks for "/public/" in the path). When we hand it the raw
+            // PHP TMP file the URL ends up pointing at /var/folders/...
+            // Move the file into public/uploads/account_logo/ first so the
+            // bundle can resolve the public URL correctly.
+            $targetDir = $this->getParameter('kernel.project_dir') . '/public/uploads/account_logo';
+            if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+                throw new \RuntimeException("Unable to create directory $targetDir");
+            }
+            $ext = $file->guessExtension() ?: 'bin';
+            $movedFile = $file->move($targetDir, uniqid('logo_', true) . '.' . $ext);
+
+            $upload = $fileHandler->makeUploadFromUploadedFile($movedFile, $request);
             $oldLogo = $account->getLogo();
             $account->setLogo($upload);
             $doctrine->getManager()->flush();

@@ -1,0 +1,44 @@
+###> symfony/framework-bundle ###
+/.env.local
+/.env.local.php
+/.env.*.local
+/config/secrets/prod/prod.decrypt.private.php
+/public/bundles/
+/var/
+/vendor/
+###< symfony/framework-bundle ###
+
+###> symfony/asset-mapper ###
+/public/assets/
+/assetmapper-public-versioned/
+###< symfony/asset-mapper ###
+
+###> phpunit/phpunit ###
+/phpunit.xml
+/.phpunit.cache/
+###< phpunit/phpunit ###
+
+###> lexik/jwt-authentication-bundle ###
+/config/jwt/*.pem
+/config/jwt/
+###< lexik/jwt-authentication-bundle ###
+
+###> oneup/uploader-bundle ###
+/public/uploads/
+###< oneup/uploader-bundle ###
+
+# Local environment overrides — never commit
+/.env.prod
+/.env.test
+/.env.dev
+/.env.staging
+
+# IDE / OS
+/.idea/
+/.vscode/
+.DS_Store
+**/.DS_Store
+*.swp
+
+# Build artefacts
+/bin/phpunit

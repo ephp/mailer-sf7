@@ -112,10 +112,10 @@
   "require-dev": {
     "nelmio/cors-bundle": "^2.5",
     "phpunit/phpunit": "^11",
+    "symfony/browser-kit": "7.4.*",
     "symfony/cache": "7.4.*",
     "symfony/maker-bundle": "^1.60",
     "symfony/stopwatch": "7.4.*",
-    "symfony/test-pack": "*",
     "symfony/web-profiler-bundle": "7.4.*"
   }
 }

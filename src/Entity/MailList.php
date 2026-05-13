@@ -77,8 +77,27 @@ class MailList
     #[ORM\Column(type: 'text', nullable: true)]
     private ?string $unsubscribeText = null;
 
+    #[ORM\Column(length: 7, nullable: true)]
+    #[Assert\Regex(pattern: '/^#[0-9A-Fa-f]{6}$/', message: 'mail_list.error.color.invalid')]
+    private ?string $defaultPrimaryColor = null;
+
+    #[ORM\Column(length: 7, nullable: true)]
+    #[Assert\Regex(pattern: '/^#[0-9A-Fa-f]{6}$/', message: 'mail_list.error.color.invalid')]
+    private ?string $defaultTextColor = null;
+
+    #[ORM\Column(length: 100, nullable: true)]
+    #[Assert\Length(max: 100)]
+    private ?string $defaultHeadingFont = null;
+
+    #[ORM\Column(length: 100, nullable: true)]
+    #[Assert\Length(max: 100)]
+    private ?string $defaultBodyFont = null;
+
     #[ORM\Column(type: 'datetime', nullable: true)]
     private ?\DateTime $deletedAt = null;
+
+    #[ORM\Column(type: 'guid', unique: true)]
+    private string $subscribeToken;
 
     #[ORM\ManyToOne(targetEntity: Account::class)]
     #[ORM\JoinColumn(name: 'account_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
@@ -87,9 +106,76 @@ class MailList
     #[ORM\OneToMany(targetEntity: Contact::class, mappedBy: 'mailList')]
     private Collection $contacts;
 
+    /**
+     * Transient fields populated by the index controller. Not ORM-mapped.
+     * When null, the consumer should fall back to the lazy getters that walk
+     * the contacts collection (used only on the single-entity find route).
+     */
+    private ?int $statsCampaignsSent = null;
+    private ?int $statsContactsTotal = null;
+    private ?int $statsContactsActive = null;
+    private ?int $statsEmailsSent = null;
+    private ?int $statsEmailsOpened = null;
+    private ?int $statsEmailsClicked = null;
+
     public function __construct()
     {
         $this->contacts = new ArrayCollection();
+        $this->subscribeToken = self::generateUuidV4();
+    }
+
+    #[Groups(['list:read'])]
+    public function getSubscribeToken(): string
+    {
+        return $this->subscribeToken;
+    }
+
+    private static function generateUuidV4(): string
+    {
+        $data = random_bytes(16);
+        $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
+        $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+    }
+
+    public function setStats(
+        int $campaignsSent,
+        int $contactsTotal,
+        int $contactsActive,
+        int $emailsSent,
+        int $emailsOpened,
+        int $emailsClicked,
+    ): void {
+        $this->statsCampaignsSent = $campaignsSent;
+        $this->statsContactsTotal = $contactsTotal;
+        $this->statsContactsActive = $contactsActive;
+        $this->statsEmailsSent = $emailsSent;
+        $this->statsEmailsOpened = $emailsOpened;
+        $this->statsEmailsClicked = $emailsClicked;
+    }
+
+    #[Groups(['list:read'])]
+    public function getStatsCampaignsSent(): ?int
+    {
+        return $this->statsCampaignsSent;
+    }
+
+    #[Groups(['list:read'])]
+    public function getStatsEmailsSent(): ?int
+    {
+        return $this->statsEmailsSent;
+    }
+
+    #[Groups(['list:read'])]
+    public function getStatsEmailsOpened(): ?int
+    {
+        return $this->statsEmailsOpened;
+    }
+
+    #[Groups(['list:read'])]
+    public function getStatsEmailsClicked(): ?int
+    {
+        return $this->statsEmailsClicked;
     }
 
     #[Groups(['list:read'])]
@@ -317,6 +403,54 @@ class MailList
         return $this;
     }
 
+    #[Groups(['list:read'])]
+    public function getDefaultPrimaryColor(): ?string
+    {
+        return $this->defaultPrimaryColor;
+    }
+
+    public function setDefaultPrimaryColor(?string $defaultPrimaryColor): static
+    {
+        $this->defaultPrimaryColor = $defaultPrimaryColor;
+        return $this;
+    }
+
+    #[Groups(['list:read'])]
+    public function getDefaultTextColor(): ?string
+    {
+        return $this->defaultTextColor;
+    }
+
+    public function setDefaultTextColor(?string $defaultTextColor): static
+    {
+        $this->defaultTextColor = $defaultTextColor;
+        return $this;
+    }
+
+    #[Groups(['list:read'])]
+    public function getDefaultHeadingFont(): ?string
+    {
+        return $this->defaultHeadingFont;
+    }
+
+    public function setDefaultHeadingFont(?string $defaultHeadingFont): static
+    {
+        $this->defaultHeadingFont = $defaultHeadingFont;
+        return $this;
+    }
+
+    #[Groups(['list:read'])]
+    public function getDefaultBodyFont(): ?string
+    {
+        return $this->defaultBodyFont;
+    }
+
+    public function setDefaultBodyFont(?string $defaultBodyFont): static
+    {
+        $this->defaultBodyFont = $defaultBodyFont;
+        return $this;
+    }
+
     public function getDeletedAt(): ?\DateTime
     {
         return $this->deletedAt;
@@ -349,13 +483,16 @@ class MailList
     #[Groups(['list:read'])]
     public function getContactCount(): int
     {
-        return $this->contacts->count();
+        // Prefer the value pre-computed by a batch query if available — walking
+        // the collection here would force a full hydrate of all contacts.
+        return $this->statsContactsTotal ?? $this->contacts->count();
     }
 
     #[Groups(['list:read'])]
     public function getActiveCount(): int
     {
-        return $this->contacts->filter(fn($c) => $c->isIscritto() === true)->count();
+        return $this->statsContactsActive
+            ?? $this->contacts->filter(fn($c) => $c->isIscritto() === true)->count();
     }
 
     #[Groups(['list:read'])]

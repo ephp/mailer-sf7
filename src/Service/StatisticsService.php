@@ -149,6 +149,7 @@ class StatisticsService
             $openStat = $openStats[$ceId] ?? null;
             $clickCount = $clickCounts[$ceId] ?? 0;
             $rows[] = [
+                'id' => $ceId,
                 'email' => $ce->getEmail(),
                 'contact_nome' => $ce->getContact()?->getNome(),
                 'contact_cognome' => $ce->getContact()?->getCognome(),

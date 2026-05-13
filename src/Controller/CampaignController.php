@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Entity\Campaign;
+use App\Entity\CampaignAttachment;
 use App\Entity\CampaignEmail;
 use App\Entity\MailList;
 use App\Form\CampaignCreateType;
@@ -12,9 +13,6 @@ use App\Message\SendCampaignEmailMessage;
 use App\Repository\CampaignEmailRepository;
 use App\Repository\CampaignRepository;
 use App\Repository\ContactRepository;
-use App\Repository\LinkStatRepository;
-use App\Repository\OpenStatRepository;
-use App\Repository\UnsubscribeRequestRepository;
 use App\Service\AccountMailerFactory;
 use App\Service\CampaignSenderService;
 use App\Service\EmailTemplateRenderer;
@@ -58,6 +56,9 @@ class CampaignController extends AbstractController
     public function index(
         Request $request,
         CampaignRepository $campaignRepository,
+        CampaignEmailRepository $campaignEmailRepository,
+        \App\Repository\OpenStatRepository $openStatRepository,
+        \App\Repository\LinkStatRepository $linkStatRepository,
         PaginatorInterface $paginator,
         SerializerInterface $serializer,
         TranslatorInterface $translator,
@@ -75,8 +76,9 @@ class CampaignController extends AbstractController
         $template = $request->query->getBoolean('template', false);
         $sort = $request->query->get('sort', 'createdAt');
         $direction = $request->query->get('direction', 'desc');
+        $search = $request->query->get('fts');
 
-        $qb = $campaignRepository->findByAccountQuery($account, $status, $template, $sort, $direction);
+        $qb = $campaignRepository->findByAccountQuery($account, $status, $template, $sort, $direction, $search);
 
         $pagination = $paginator->paginate(
             $qb,
@@ -84,6 +86,23 @@ class CampaignController extends AbstractController
             $request->query->getInt('per_page', 20),
             ['sortFieldParameterName' => '_disabled_sort'],
         );
+
+        /** @var Campaign[] $items */
+        $items = iterator_to_array($pagination);
+        $ids = array_values(array_filter(array_map(fn(Campaign $c) => $c->getId(), $items)));
+        if ($ids !== []) {
+            $sentMap = $campaignEmailRepository->countByCampaignIdsAndStatus($ids, \Ephp\MailflowBundle\Enum\CampaignEmailStatus::Sent);
+            $opensMap = $openStatRepository->countUniqueByCampaignIds($ids);
+            $clicksMap = $linkStatRepository->countUniqueByCampaignIds($ids);
+            foreach ($items as $c) {
+                $cid = (int) $c->getId();
+                $c->setStats(
+                    $sentMap[$cid] ?? 0,
+                    $opensMap[$cid] ?? 0,
+                    $clicksMap[$cid] ?? 0,
+                );
+            }
+        }
 
         return new Response($serializer->serialize(new PaginatedList($pagination), 'json', ['groups' => ['campaign:read']]));
     }
@@ -93,6 +112,7 @@ class CampaignController extends AbstractController
     public function find(
         int $id,
         CampaignRepository $campaignRepository,
+        \App\Repository\CampaignAttachmentRepository $attachmentRepository,
         SerializerInterface $serializer,
         TranslatorInterface $translator,
     ): Response {
@@ -112,7 +132,28 @@ class CampaignController extends AbstractController
             return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
         }
 
+        $campaign->setAttachmentsPayload($this->buildAttachmentsPayload($attachmentRepository->findByCampaign($campaign)));
+
         return new Response($serializer->serialize(new ItemDetail($campaign), 'json', ['groups' => ['campaign:read']]));
+    }
+
+    /**
+     * @param iterable<\App\Entity\CampaignAttachment> $attachments
+     * @return array<int, array{id:int, filename:string, size:int, mimetype:?string, url:string}>
+     */
+    private function buildAttachmentsPayload(iterable $attachments): array
+    {
+        $out = [];
+        foreach ($attachments as $att) {
+            $out[] = [
+                'id' => (int) $att->getId(),
+                'filename' => $att->getFilename(),
+                'size' => $att->getSize(),
+                'mimetype' => $att->getMimetype(),
+                'url' => (string) ($att->getUpload()?->getUrl() ?? ''),
+            ];
+        }
+        return $out;
     }
 
     #[Route('/campaigns/{id}/preview', name: 'campaign_preview', methods: ['GET'])]
@@ -219,6 +260,8 @@ class CampaignController extends AbstractController
                     ->subject($subject)
                     ->html($rendered->html)
                     ->text($rendered->plainText);
+
+                $email->getHeaders()->addTextHeader('Content-Language', 'it');
 
                 $mailer->send($email);
                 $sent++;
@@ -627,6 +670,175 @@ class CampaignController extends AbstractController
         return new Response($serializer->serialize($detail, 'json'), Response::HTTP_ACCEPTED);
     }
 
+    #[Route('/campaigns/{id}/attachments', name: 'campaign_attachment_upload', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function attachmentUpload(
+        int $id,
+        Request $request,
+        CampaignRepository $campaignRepository,
+        \App\Repository\CampaignAttachmentRepository $attachmentRepository,
+        EntityManagerInterface $em,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+        \Oi\FileBundle\Service\FileHandlerInterface $fileHandler,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $campaign = $campaignRepository->findOneByIdAndAccount($id, $account);
+        if ($campaign === null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $file = $request->files->get('file');
+        if ($file === null) {
+            $detail = new ItemDetail(null, 'No file provided', ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_BAD_REQUEST);
+        }
+
+        // Move into public/uploads/campaign_attachment first, then let
+        // FileHandler register the Upload (same pattern as the Account logo).
+        $targetDir = $this->getParameter('kernel.project_dir') . '/public/uploads/campaign_attachment';
+        if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+            throw new \RuntimeException("Unable to create directory $targetDir");
+        }
+        $ext = $file->guessExtension() ?: 'bin';
+        $originalName = $file->getClientOriginalName();
+        $movedFile = $file->move($targetDir, uniqid('att_', true) . '.' . $ext);
+
+        $upload = $fileHandler->makeUploadFromUploadedFile($movedFile, $request);
+
+        $attachment = new CampaignAttachment();
+        $attachment->setCampaign($campaign);
+        $attachment->setUpload($upload);
+        $attachment->setFilename($originalName);
+        $attachment->setSize($upload->getSize());
+        $attachment->setMimetype($upload->getMimetype());
+
+        $em->persist($attachment);
+        $em->flush();
+
+        $payload = [
+            'id' => (int) $attachment->getId(),
+            'filename' => $attachment->getFilename(),
+            'size' => $attachment->getSize(),
+            'mimetype' => $attachment->getMimetype(),
+            'url' => (string) ($upload->getUrl() ?? ''),
+        ];
+        return new Response($serializer->serialize(new ItemDetail($payload), 'json'), Response::HTTP_CREATED);
+    }
+
+    #[Route('/campaigns/{id}/attachments/{attachmentId}', name: 'campaign_attachment_delete', methods: ['DELETE'], requirements: ['id' => '\d+', 'attachmentId' => '\d+'])]
+    #[IsGranted('ROLE_USER')]
+    public function attachmentDelete(
+        int $id,
+        int $attachmentId,
+        CampaignRepository $campaignRepository,
+        \App\Repository\CampaignAttachmentRepository $attachmentRepository,
+        EntityManagerInterface $em,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+        \Oi\FileBundle\Service\FileHandlerInterface $fileHandler,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $campaign = $campaignRepository->findOneByIdAndAccount($id, $account);
+        if ($campaign === null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $attachment = $attachmentRepository->find($attachmentId);
+        if ($attachment === null || $attachment->getCampaign()?->getId() !== $campaign->getId()) {
+            return new Response('', Response::HTTP_NOT_FOUND);
+        }
+
+        $upload = $attachment->getUpload();
+        $em->remove($attachment);
+        $em->flush();
+        if ($upload !== null) {
+            try {
+                $fileHandler->deleteFile($upload);
+            } catch (\Throwable) {
+                // best-effort: row is gone even if the physical file can't be removed
+            }
+        }
+
+        return new Response('', Response::HTTP_NO_CONTENT);
+    }
+
+    #[Route('/campaigns/{id}/schedule', name: 'campaign_schedule', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function schedule(
+        int $id,
+        Request $request,
+        CampaignRepository $campaignRepository,
+        EntityManagerInterface $em,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $campaign = $campaignRepository->findOneByIdAndAccount($id, $account);
+        if ($campaign === null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        if (!in_array($campaign->getStatus(), ['draft', 'scheduled'], true) || $campaign->getSentAt() !== null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_schedulable'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_BAD_REQUEST);
+        }
+
+        $payload = $request->toArray();
+        $scheduledAtRaw = (string) ($payload['scheduled_at'] ?? '');
+
+        // Allow unscheduling: scheduled_at = null/empty → back to draft
+        if ($scheduledAtRaw === '') {
+            $campaign->setScheduledAt(null);
+            $campaign->setStatus('draft');
+            $em->flush();
+            return new Response($serializer->serialize(new ItemDetail($campaign), 'json', ['groups' => ['campaign:read']]));
+        }
+
+        try {
+            $scheduledAt = new \DateTime($scheduledAtRaw);
+        } catch (\Exception) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.invalid_date'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        if ($scheduledAt < new \DateTime()) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.scheduled_past'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $campaign->setScheduledAt($scheduledAt);
+        $campaign->setStatus('scheduled');
+        $em->flush();
+
+        return new Response($serializer->serialize(new ItemDetail($campaign), 'json', ['groups' => ['campaign:read']]));
+    }
+
     #[Route('/campaigns/{id}/sending-status', name: 'campaign_sending_status', methods: ['GET'])]
     #[IsGranted('ROLE_USER')]
     public function sendingStatus(
@@ -676,48 +888,6 @@ class CampaignController extends AbstractController
         ]);
 
         return new Response($serializer->serialize($detail, 'json'), Response::HTTP_OK);
-    }
-
-    #[Route('/campaigns/{id}/stats', name: 'campaign_stats', methods: ['GET'])]
-    #[IsGranted('ROLE_USER')]
-    public function stats(
-        int $id,
-        ManagerRegistry $doctrine,
-        SerializerInterface $serializer,
-        TranslatorInterface $translator,
-        CampaignEmailRepository $campaignEmailRepository,
-        OpenStatRepository $openStatRepository,
-        LinkStatRepository $linkStatRepository,
-        UnsubscribeRequestRepository $unsubscribeRepository,
-    ): Response {
-        $campaign = $this->findCampaignForUser($id, $doctrine, $translator, $serializer);
-        if ($campaign instanceof Response) {
-            return $campaign;
-        }
-
-        $totalSent = $campaignEmailRepository->countByCampaignAndStatus($campaign, \Ephp\MailflowBundle\Enum\CampaignEmailStatus::Sent);
-        $totalFailed = $campaignEmailRepository->countByCampaignAndStatus($campaign, \Ephp\MailflowBundle\Enum\CampaignEmailStatus::Failed);
-        $totalPending = $campaignEmailRepository->countByCampaignAndStatus($campaign, \Ephp\MailflowBundle\Enum\CampaignEmailStatus::Pending);
-        $totalBounced = $campaignEmailRepository->countByCampaignAndStatus($campaign, \Ephp\MailflowBundle\Enum\CampaignEmailStatus::Bounced);
-        $totalOpens = $openStatRepository->countUniqueByCampaign($campaign);
-        $totalClicks = $linkStatRepository->countUniqueByCampaign($campaign);
-        $totalUnsubscribes = $unsubscribeRepository->countByCampaign($campaign);
-
-        $stats = [
-            'total_sent' => $totalSent,
-            'total_failed' => $totalFailed,
-            'total_pending' => $totalPending,
-            'total_bounced' => $totalBounced,
-            'total_opens' => $totalOpens,
-            'total_clicks' => $totalClicks,
-            'total_unsubscribes' => $totalUnsubscribes,
-            'open_rate' => $totalSent > 0 ? round($totalOpens / $totalSent * 100, 1) : 0.0,
-            'click_rate' => $totalSent > 0 ? round($totalClicks / $totalSent * 100, 1) : 0.0,
-            'unsubscribe_rate' => $totalSent > 0 ? round($totalUnsubscribes / $totalSent * 100, 1) : 0.0,
-        ];
-
-        $detail = new ItemDetail($stats);
-        return new Response($serializer->serialize($detail, 'json'));
     }
 
     #[Route('/campaign-templates', name: 'campaign_template_index', methods: ['GET'])]

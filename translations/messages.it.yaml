@@ -5,6 +5,9 @@ campaign:
     no_mail_lists: "La campagna non ha liste di distribuzione associate."
     smtp_not_configured: "SMTP non configurato per questo account."
     no_recipients: "Nessun destinatario trovato per questa campagna."
+    not_schedulable: "La campagna non può essere pianificata (stato non valido o già inviata)."
+    invalid_date: "Formato data non valido."
+    scheduled_past: "La data di pianificazione deve essere nel futuro."
   success:
     saved_as_template: "Campagna salvata come template."
     duplicated: "Campagna duplicata con successo."

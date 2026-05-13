@@ -11,7 +11,7 @@
   </div>
 {% else %}
   <div style="margin:-32px -32px 24px;background-color:{{ primaryColor }};padding:40px 32px;text-align:center;">
-    <p style="color:#ffffff;font-size:26px;font-weight:bold;margin:0;">{{ subject }}</p>
+    <p style="color:{{ onPrimaryColor }};font-size:26px;font-weight:bold;margin:0;">{{ subject }}</p>
   </div>
 {% endif %}
 
@@ -21,7 +21,7 @@
 
 <div style="text-align:center;margin:28px 0;">
   <a href="{{ ctaUrl }}"
-     style="display:inline-block;background-color:{{ primaryColor }};color:#ffffff;font-size:16px;font-weight:bold;padding:14px 32px;border-radius:4px;text-decoration:none;">
+     style="display:inline-block;background-color:{{ primaryColor }};color:{{ onPrimaryColor }};font-size:16px;font-weight:bold;padding:14px 32px;border-radius:4px;text-decoration:none;">
     {{ ctaLabel }}
   </a>
 </div>

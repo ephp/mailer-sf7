@@ -1,0 +1,34 @@
+{
+  "name": "ephp/mailflow",
+  "type": "symfony-bundle",
+  "description": "Bundle per la gestione di campagne email multi-tenant: liste contatti, invio massivo, tracking aperture e click.",
+  "keywords": ["email", "newsletter", "mailer", "campaign"],
+  "homepage": "https://www.ephp.it",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Ephraim Pepe <ephraim@ephp.it>"
+    }
+  ],
+  "require": {
+    "php": "^8.2",
+    "symfony/framework-bundle": "^7.4",
+    "symfony/mailer": "^7.4",
+    "symfony/messenger": "^7.4",
+    "symfony/form": "^7.4",
+    "symfony/validator": "^7.4",
+    "doctrine/orm": "^3.0",
+    "doctrine/doctrine-bundle": "^2.11",
+    "gedmo/doctrine-extensions": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "Ephp\\MailflowBundle\\": "src/"
+    }
+  },
+  "extra": {
+    "branch-alias": {
+      "dev-main": "1.0-dev"
+    }
+  }
+}

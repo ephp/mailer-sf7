@@ -34,7 +34,7 @@ class CampaignCompletionNotifier
         }
 
         $campaign->setStatus('sent');
-        $campaign->setSentAt(new \DateTimeImmutable());
+        $campaign->setSentAt(new \DateTime());
         $this->em->flush();
 
         $account = $campaign->getAccount();

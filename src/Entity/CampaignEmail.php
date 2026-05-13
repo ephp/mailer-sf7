@@ -30,9 +30,15 @@ class CampaignEmail extends BaseCampaignEmail
     #[ORM\JoinColumn(name: 'mail_list_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
     private ?MailList $mailList = null;
 
+    #[ORM\Column(type: 'text', nullable: true)]
+    private ?string $html = null;
+
     public function __construct()
     {
         $this->unsubscribeToken = self::generateUuidV4();
+        // BaseCampaignEmail leaves trackingOpenId as an empty string by default,
+        // which collides on the unique index when persisting multiple records.
+        $this->setTrackingOpenId(self::generateUuidV4());
     }
 
     public function getUnsubscribeToken(): string
@@ -83,6 +89,18 @@ class CampaignEmail extends BaseCampaignEmail
     public function setMailList(?MailList $mailList): static
     {
         $this->mailList = $mailList;
+        return $this;
+    }
+
+    #[Ignore]
+    public function getHtml(): ?string
+    {
+        return $this->html;
+    }
+
+    public function setHtml(?string $html): static
+    {
+        $this->html = $html;
         return $this;
     }
 

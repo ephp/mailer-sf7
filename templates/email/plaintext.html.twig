@@ -3,32 +3,28 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Language" content="it">
   <title>{{ subject }}</title>
   <style>
-    body { margin: 0; padding: 20px; background-color: #ffffff; font-family: 'Courier New', Courier, monospace; font-size: 14px; color: {{ textColor }}; line-height: 1.7; }
-    .email-plain-container { max-width: 600px; margin: 0 auto; }
-    .email-plain-header { border-bottom: 2px solid {{ textColor }}; padding-bottom: 12px; margin-bottom: 20px; }
-    .email-plain-from { font-weight: bold; }
-    .email-plain-subject { font-style: italic; }
-    .email-plain-body { white-space: pre-wrap; word-wrap: break-word; }
-    .email-plain-footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #cccccc; font-size: 12px; color: #666666; }
-    a { color: {{ textColor }}; text-decoration: underline; }
     @media only screen and (max-width: 600px) {
-      body { padding: 12px; }
+      body { padding: 12px !important; }
     }
   </style>
 </head>
-<body>
-  <div class="email-plain-container">
-    <div class="email-plain-header">
-      <div class="email-plain-from">Da: {{ account.ragioneSociale }}</div>
-      <div class="email-plain-subject">Oggetto: {{ subject }}</div>
+<body style="margin:0;padding:20px;background-color:#ffffff;font-family:'Courier New',Courier,monospace;font-size:14px;color:{{ textColor }};line-height:1.7;">
+  <div style="max-width:600px;margin:0 auto;">
+    <div style="border-bottom:2px solid {{ textColor }};padding-bottom:12px;margin-bottom:20px;">
+      <div style="font-weight:bold;">Da: {{ account.ragioneSociale }}</div>
+      <div style="font-style:italic;">Oggetto: {{ subject }}</div>
     </div>
-    <div class="email-plain-body">{{ body|striptags }}</div>
-    <div class="email-plain-footer">
+    <div style="white-space:pre-wrap;word-wrap:break-word;">{{ bodyPlain }}</div>
+    {% if signaturePlain %}
+      <div style="margin-top:24px;padding-top:12px;border-top:1px dashed #cccccc;white-space:pre-wrap;">{{ signaturePlain }}</div>
+    {% endif %}
+    <div style="margin-top:32px;padding-top:12px;border-top:1px solid #cccccc;font-size:12px;color:#666666;">
       <div>{{ account.ragioneSociale }}</div>
       {% if unsubscribeUrl %}
-        <div>Per disiscriverti: {{ unsubscribeUrl }}</div>
+        <div>Per disiscriverti: <a href="{{ unsubscribeUrl }}" style="color:#666666;text-decoration:underline;">{{ unsubscribeUrl }}</a></div>
       {% endif %}
     </div>
   </div>

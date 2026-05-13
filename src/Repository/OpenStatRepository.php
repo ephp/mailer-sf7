@@ -34,6 +34,79 @@ class OpenStatRepository extends ServiceEntityRepository
             ->getSingleScalarResult();
     }
 
+    /**
+     * @param int[] $contactIds
+     * @return array<int, int> map contactId => count of campaign_email rows opened by this contact
+     */
+    public function countOpenedByContactIds(array $contactIds): array
+    {
+        if ($contactIds === []) {
+            return [];
+        }
+        $rows = $this->createQueryBuilder('os')
+            ->select('IDENTITY(ce.contact) AS cid, COUNT(DISTINCT IDENTITY(os.campaignEmail)) AS c')
+            ->innerJoin('os.campaignEmail', 'ce')
+            ->where('ce.contact IN (:ids)')
+            ->setParameter('ids', $contactIds)
+            ->groupBy('ce.contact')
+            ->getQuery()
+            ->getArrayResult();
+        $map = [];
+        foreach ($rows as $r) {
+            $map[(int) $r['cid']] = (int) $r['c'];
+        }
+        return $map;
+    }
+
+    /**
+     * @param int[] $mailListIds
+     * @return array<int, int> map mailListId => unique opens count
+     */
+    public function countUniqueByMailListIds(array $mailListIds): array
+    {
+        if ($mailListIds === []) {
+            return [];
+        }
+        $conn = $this->getEntityManager()->getConnection();
+        $placeholders = implode(',', array_fill(0, count($mailListIds), '?'));
+        $sql = "SELECT cml.mail_list_id AS lid, COUNT(DISTINCT os.campaign_email_id) AS c
+                FROM open_stat os
+                INNER JOIN campaign_email ce ON ce.id = os.campaign_email_id
+                INNER JOIN campaign_mail_list cml ON cml.campaign_id = ce.campaign_id
+                WHERE cml.mail_list_id IN ($placeholders)
+                GROUP BY cml.mail_list_id";
+        $rows = $conn->executeQuery($sql, array_values($mailListIds))->fetchAllAssociative();
+        $map = [];
+        foreach ($rows as $r) {
+            $map[(int) $r['lid']] = (int) $r['c'];
+        }
+        return $map;
+    }
+
+    /**
+     * @param int[] $campaignIds
+     * @return array<int, int> map campaignId => unique opens count
+     */
+    public function countUniqueByCampaignIds(array $campaignIds): array
+    {
+        if ($campaignIds === []) {
+            return [];
+        }
+        $rows = $this->createQueryBuilder('os')
+            ->select('IDENTITY(ce.campaign) AS cid, COUNT(DISTINCT IDENTITY(os.campaignEmail)) AS c')
+            ->innerJoin('os.campaignEmail', 'ce')
+            ->where('ce.campaign IN (:ids)')
+            ->setParameter('ids', $campaignIds)
+            ->groupBy('ce.campaign')
+            ->getQuery()
+            ->getArrayResult();
+        $map = [];
+        foreach ($rows as $r) {
+            $map[(int) $r['cid']] = (int) $r['c'];
+        }
+        return $map;
+    }
+
     public function countUniqueByAccount(\App\Entity\Account $account): int
     {
         return (int) $this->createQueryBuilder('os')

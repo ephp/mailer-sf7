@@ -91,4 +91,14 @@ class MailListRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleScalarResult();
     }
+
+    public function findOneBySubscribeToken(string $token): ?MailList
+    {
+        return $this->createQueryBuilder('ml')
+            ->where('ml.subscribeToken = :token')
+            ->andWhere('ml.deletedAt IS NULL')
+            ->setParameter('token', $token)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
 }

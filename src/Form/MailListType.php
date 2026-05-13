@@ -37,6 +37,10 @@ class MailListType extends AbstractType
             ])
             ->add('mailFrom', EmailType::class, ['required' => false])
             ->add('mailFromName', TextType::class, ['required' => false])
+            ->add('defaultPrimaryColor', TextType::class, ['required' => false])
+            ->add('defaultTextColor', TextType::class, ['required' => false])
+            ->add('defaultHeadingFont', TextType::class, ['required' => false])
+            ->add('defaultBodyFont', TextType::class, ['required' => false])
             ->add('permettiDisiscrizione', CheckboxType::class, ['required' => false, 'data' => true])
             ->add('unsubscribeText', TextareaType::class, ['required' => false]);
     }
