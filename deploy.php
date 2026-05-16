@@ -4,13 +4,13 @@ namespace Deployer;
 require 'recipe/symfony.php';
 
 // Run with
-// ~/.composer/vendor/bin/dep deploy -o remote_user=admin -o become=root
+// ~/.composer/vendor/bin/dep deploy -o remote_user=epep -o become=root
 // REQUIRES DEPLOYER TO BE INSTALLED GLOBALLY:
 // composer global require deployer/deployer
 
 // Config
 
-set('repository', 'git@github.com:Oimmei-Digital-Boutique/AgroalimentareServer.git');
+set('repository', 'git@github.com:ephp/mailer-sf7.git');
 set('default_timeout', 3600);
 set('http_user', 'www-data');
 set('writable_mode', 'chown');
@@ -32,8 +32,8 @@ set('env', [
 
 // Hosts
 
-host('3.125.68.183')
-    ->set('deploy_path', '/var/www/api.maremmatirrenoitinerari.it')
+host('116.203.226.28')
+    ->set('deploy_path', '/var/www/mailer-sf7')
     ->set('writable_recursive', true)
 ;
 
@@ -53,7 +53,7 @@ task('composer:dump-autoload', function () {
 
 task('php-fpm:restart', function () {
     // Restarting PHP to load the new container file.
-    run('sudo systemctl restart php8.2-fpm.service');
+    run('sudo systemctl restart php8.3-fpm.service');
 });
 
 after('deploy:failed', 'deploy:unlock');
