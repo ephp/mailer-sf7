@@ -21,7 +21,7 @@
     "oi/geo": "7.0.*",
     "oi/helper": "7.0.*",
     "oi/postgres": "7.0.*",
-    "oi/tag": "*",
+    "oi/tag": "^7.0.1",
     "oi/user-api": "7.0.*",
     "oi/utility": "7.0.*",
     "phpoffice/phpspreadsheet": "^3.0",
