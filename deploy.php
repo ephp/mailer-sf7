@@ -53,7 +53,7 @@ task('composer:dump-autoload', function () {
 
 task('php-fpm:restart', function () {
     // Restarting PHP to load the new container file.
-    run('sudo systemctl restart php8.3-fpm.service');
+    run('sudo systemctl restart php8.2-fpm.service');
 });
 
 after('deploy:failed', 'deploy:unlock');

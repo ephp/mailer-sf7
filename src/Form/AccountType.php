@@ -36,6 +36,9 @@ class AccountType extends AbstractType
                     'None' => 'none',
                 ],
             ])
+            ->add('batchSize', IntegerType::class, ['required' => false])
+            ->add('sendInterval', IntegerType::class, ['required' => false])
+            ->add('apiRateLimit', IntegerType::class, ['required' => false])
             ->add('privacyPolicy', TextareaType::class, ['required' => false]);
     }
 
