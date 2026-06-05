@@ -80,7 +80,10 @@ class AccountController extends AbstractController
         if (empty($raw)) {
             $raw = json_decode($request->getContent(), true) ?? [];
         }
-        $form->submit($raw[$form->getName()] ?? $raw);
+        // PATCH = partial update: i campi mancanti tengono il valore esistente.
+        // Senza questo, i setter non-nullable (es. setBatchSize(int)) esplodono
+        // quando il client manda un payload parziale.
+        $form->submit($raw[$form->getName()] ?? $raw, $request->isMethod('PUT'));
 
         if ($form->isSubmitted() && $form->isValid()) {
             $newPassword = $account->getSmtpPassword();
