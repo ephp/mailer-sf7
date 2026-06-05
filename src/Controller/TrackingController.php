@@ -13,7 +13,6 @@ use App\Service\EmailTemplateRenderer;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -28,6 +27,11 @@ class TrackingController extends AbstractController
         #[Autowire('%kernel.project_dir%')] private readonly string $projectDir,
     ) {}
 
+    // 1x1 PNG trasparente — fallback inline quando public/img/email.png manca
+    // sul filesystem di deploy. Garantisce che l'endpoint torni sempre 200 con
+    // un'immagine valida invece di scoppià' con un'eccezione FileNotFound.
+    private const TRANSPARENT_PIXEL_PNG = "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\x0d\x0a\x2d\xb4\x00\x00\x00\x00IEND\xaeB`\x82";
+
     #[Route('/t/open/{uuid}', name: 'tracking_open', methods: ['GET'])]
     public function open(
         string $uuid,
@@ -37,13 +41,18 @@ class TrackingController extends AbstractController
         RateLimiterFactory $trackingOpenLimiter,
         LoggerInterface $logger,
     ): Response {
-        $buildPixelResponse = function (): BinaryFileResponse {
-            $response = new BinaryFileResponse($this->projectDir . '/public/img/email.png');
-            $response->headers->set('Content-Type', 'image/png');
-            $response->headers->set('Cache-Control', 'no-cache, no-store, must-revalidate');
-            $response->headers->set('Pragma', 'no-cache');
-            $response->headers->set('Expires', '0');
-            return $response;
+        $buildPixelResponse = function (): Response {
+            $path = $this->projectDir . '/public/img/email.png';
+            $body = is_file($path) && is_readable($path)
+                ? (string) file_get_contents($path)
+                : self::TRANSPARENT_PIXEL_PNG;
+
+            return new Response($body, Response::HTTP_OK, [
+                'Content-Type' => 'image/png',
+                'Cache-Control' => 'no-cache, no-store, must-revalidate',
+                'Pragma' => 'no-cache',
+                'Expires' => '0',
+            ]);
         };
 
         $limit = $trackingOpenLimiter->create($request->getClientIp() ?? 'unknown')->consume();
