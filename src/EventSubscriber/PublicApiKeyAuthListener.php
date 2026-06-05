@@ -36,6 +36,13 @@ class PublicApiKeyAuthListener implements EventSubscriberInterface
             return;
         }
 
+        // La form di iscrizione pubblica (/subscribe/{uuid}) la usano browser
+        // anonimi via QR code, niente API key — sta su /api/public/v1/ solo
+        // perche' nginx instrada /api/* al backend e /subscribe/* a Next.
+        if (preg_match('#^/api/public/v1/subscribe/[0-9a-fA-F-]{36}$#', $request->getPathInfo())) {
+            return;
+        }
+
         $apiKey = $request->headers->get('X-API-Key');
 
         if ($apiKey === null || $apiKey === '') {
