@@ -54,6 +54,33 @@ class ContactController extends AbstractController
                ->setParameter('fts', '%' . $fts . '%');
         }
 
+        // Filter by taxonomy terms: contacts must match at least one term
+        // for each distinct category present among the selected term ids.
+        $rawTermIds = $request->query->all('taxonomy_term_ids');
+        $termIds = is_array($rawTermIds) ? array_values(array_filter(array_map('intval', $rawTermIds))) : [];
+        if ($termIds !== []) {
+            $terms = $doctrine->getRepository(\App\Entity\TaxonomyTerm::class)
+                ->findBy(['id' => $termIds]);
+            $byCategory = [];
+            foreach ($terms as $term) {
+                $catId = (int) $term->getCategory()?->getId();
+                if ($catId === 0) {
+                    continue;
+                }
+                $byCategory[$catId][] = (int) $term->getId();
+            }
+            $i = 0;
+            foreach ($byCategory as $catTermIds) {
+                $alias = 'ct_' . $i;
+                $param = 'tx_terms_' . $i;
+                $qb->andWhere(sprintf(
+                    'EXISTS (SELECT 1 FROM %s %s WHERE %s.contact = c AND %s.term IN (:%s))',
+                    \App\Entity\ContactTaxonomy::class, $alias, $alias, $alias, $param,
+                ))->setParameter($param, $catTermIds);
+                $i++;
+            }
+        }
+
         $pagination = $paginator->paginate(
             $qb,
             $request->query->getInt('page', 1),

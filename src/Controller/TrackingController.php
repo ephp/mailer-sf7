@@ -9,6 +9,7 @@ use App\Entity\UnsubscribeRequest;
 use App\Repository\LinkStatRepository;
 use App\Repository\OpenStatRepository;
 use App\Repository\UnsubscribeRequestRepository;
+use App\Service\EmailTemplateRenderer;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -75,14 +76,45 @@ class TrackingController extends AbstractController
     public function webView(
         string $uuid,
         EntityManagerInterface $em,
+        EmailTemplateRenderer $renderer,
     ): Response {
         $campaignEmail = $em->getRepository(CampaignEmail::class)->findOneBy(['trackingOpenId' => $uuid]);
 
-        if ($campaignEmail === null || $campaignEmail->getHtml() === null) {
+        if ($campaignEmail === null) {
             return $this->render('email/web_view_not_found.html.twig', [], new Response(status: Response::HTTP_NOT_FOUND));
         }
 
-        return new Response($campaignEmail->getHtml(), Response::HTTP_OK, [
+        $html = $campaignEmail->getHtml();
+
+        // Le mail spedite prima della migration 20260509120001 (colonna `html`)
+        // hanno html=NULL. Ri-renderizziamo on-the-fly e ricacciamo in DB così
+        // dalla seconda apertura serviamo dalla copia archiviata.
+        if ($html === null || $html === '') {
+            $campaign = $campaignEmail->getCampaign();
+            if ($campaign === null) {
+                return $this->render('email/web_view_not_found.html.twig', [], new Response(status: Response::HTTP_NOT_FOUND));
+            }
+
+            $mailList = $campaignEmail->getMailList();
+            $unsubUrl = $mailList?->isPermettiDisiscrizione() !== false
+                ? $this->appUrl . '/unsubscribe/' . $campaignEmail->getUnsubscribeToken()
+                : null;
+            $webViewUrl = $this->appUrl . '/v/' . $campaignEmail->getTrackingOpenId();
+            $openTrackingUrl = $this->appUrl . '/t/open/' . $campaignEmail->getTrackingOpenId();
+
+            $html = $renderer->render(
+                $campaign,
+                $campaignEmail->getContact(),
+                $unsubUrl,
+                $webViewUrl,
+                $openTrackingUrl,
+            )->html;
+
+            $campaignEmail->setHtml($html);
+            $em->flush();
+        }
+
+        return new Response($html, Response::HTTP_OK, [
             'Content-Type' => 'text/html; charset=UTF-8',
             'X-Robots-Tag' => 'noindex, nofollow',
         ]);

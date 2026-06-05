@@ -53,7 +53,15 @@ task('composer:dump-autoload', function () {
 
 task('php-fpm:restart', function () {
     // Restarting PHP to load the new container file.
+    run('sudo systemctl restart php8.3-fpm.service');
     run('sudo systemctl restart php8.2-fpm.service');
+});
+
+task('app:cache:clear', function () {
+    within('{{release_path}}', function () {
+        run('php bin/console cache:clear --env=prod --no-warmup');
+        run('php bin/console cache:warmup --env=prod');
+    });
 });
 
 after('deploy:failed', 'deploy:unlock');
@@ -61,6 +69,7 @@ before('deploy:symlink', 'composer:dump-autoload');
 after('deploy:cleanup', 'php-fpm:restart');
 
 after('deploy:symlink', 'database:migrate');
+after('database:migrate', 'app:cache:clear');
 
 // This is a fix for the base v7 recipe, that doesn't make the cache
 // and sessions writable as they should after clearing them up.
