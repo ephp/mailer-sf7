@@ -23,6 +23,10 @@ use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
+// Prefisso /api/public/v1: la rotta vecchia /subscribe/{token} collideva con
+// la pagina Next dello stesso path (form pubblico di iscrizione). Nginx
+// instrada /api/* al backend, /subscribe/* a Next. Allineato a PublicApiController.
+#[Route('/api/public/v1')]
 class PublicSubscribeController extends AbstractController
 {
     #[Route('/subscribe/{token}', name: 'public_subscribe_info', methods: ['GET'], requirements: ['token' => '[0-9a-fA-F-]{36}'])]
