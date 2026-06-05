@@ -155,6 +155,7 @@ class StatisticsService
                 'contact_cognome' => $ce->getContact()?->getCognome(),
                 'mail_list_name' => $ce->getMailList()?->getName(),
                 'status' => $ce->getStatus()->value,
+                'error_message' => $ce->getErrorMessage(),
                 'opened' => $openStat !== null,
                 'opened_at' => $openStat?->getFirstOpenedAt()?->format(\DateTimeInterface::ATOM),
                 'open_count' => $openStat?->getCount() ?? 0,
