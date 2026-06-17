@@ -20,3 +20,13 @@ framework:
             limit: 10
             interval: '1 minute'
             cache_pool: cache.app
+        # Throttle dell'invio email: garantisce mai più di N invii in una
+        # qualsiasi finestra di 60s, così l'SMTP d'Aruba (max 12/min) non
+        # rifiuta e non manda in bounce. Attaccato al transport "async" in
+        # messenger.yaml. cache.app = stato persistente, sopravvive ai restart
+        # del worker.
+        messenger_email:
+            policy: sliding_window
+            limit: 12
+            interval: '1 minute'
+            cache_pool: cache.app

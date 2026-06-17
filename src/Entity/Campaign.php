@@ -39,17 +39,19 @@ class Campaign extends BaseCampaign
     private ?int $statsSent = null;
     private ?int $statsUniqueOpens = null;
     private ?int $statsUniqueClicks = null;
+    private ?int $statsBounced = null;
 
     public function __construct()
     {
         $this->mailLists = new ArrayCollection();
     }
 
-    public function setStats(int $sent, int $uniqueOpens, int $uniqueClicks): void
+    public function setStats(int $sent, int $uniqueOpens, int $uniqueClicks, int $bounced = 0): void
     {
         $this->statsSent = $sent;
         $this->statsUniqueOpens = $uniqueOpens;
         $this->statsUniqueClicks = $uniqueClicks;
+        $this->statsBounced = $bounced;
     }
 
     #[Groups(['campaign:read'])]
@@ -68,6 +70,12 @@ class Campaign extends BaseCampaign
     public function getStatsUniqueClicks(): ?int
     {
         return $this->statsUniqueClicks;
+    }
+
+    #[Groups(['campaign:read'])]
+    public function getStatsBounced(): ?int
+    {
+        return $this->statsBounced;
     }
 
     #[Groups(['campaign:read'])]

@@ -92,6 +92,7 @@ class CampaignController extends AbstractController
         $ids = array_values(array_filter(array_map(fn(Campaign $c) => $c->getId(), $items)));
         if ($ids !== []) {
             $sentMap = $campaignEmailRepository->countByCampaignIdsAndStatus($ids, \Ephp\MailflowBundle\Enum\CampaignEmailStatus::Sent);
+            $bouncedMap = $campaignEmailRepository->countByCampaignIdsAndStatus($ids, \Ephp\MailflowBundle\Enum\CampaignEmailStatus::Bounced);
             $opensMap = $openStatRepository->countUniqueByCampaignIds($ids);
             $clicksMap = $linkStatRepository->countUniqueByCampaignIds($ids);
             foreach ($items as $c) {
@@ -100,6 +101,7 @@ class CampaignController extends AbstractController
                     $sentMap[$cid] ?? 0,
                     $opensMap[$cid] ?? 0,
                     $clicksMap[$cid] ?? 0,
+                    $bouncedMap[$cid] ?? 0,
                 );
             }
         }
@@ -667,6 +669,49 @@ class CampaignController extends AbstractController
         $em->flush();
 
         $detail = new ItemDetail(['total_emails' => $totalEmails]);
+        return new Response($serializer->serialize($detail, 'json'), Response::HTTP_ACCEPTED);
+    }
+
+    #[Route('/campaigns/{id}/resend-bounced', name: 'campaign_resend_bounced', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function resendBounced(
+        int $id,
+        CampaignRepository $campaignRepository,
+        EntityManagerInterface $em,
+        SerializerInterface $serializer,
+        TranslatorInterface $translator,
+    ): Response {
+        /** @var \App\Entity\User $user */
+        $user = $this->getUser();
+        $account = $user->getAccount();
+
+        if ($account === null) {
+            $detail = new ItemDetail(null, $translator->trans('account.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        $campaign = $campaignRepository->findOneByIdAndAccount($id, $account);
+
+        if ($campaign === null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.not_found'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_NOT_FOUND);
+        }
+
+        if ($account->getEffectiveDsn() === null) {
+            $detail = new ItemDetail(null, $translator->trans('campaign.error.smtp_not_configured'), ItemDetail::MESSAGE_ERROR);
+            return new Response($serializer->serialize($detail, 'json'), Response::HTTP_BAD_REQUEST);
+        }
+
+        $requeued = $this->campaignSenderService->resendBounced($campaign);
+
+        if ($requeued > 0) {
+            // Re-queued emails are Pending again; flip the campaign back to
+            // "sending" so the list shows the progress bar while they flow out.
+            $campaign->setStatus('sending');
+            $em->flush();
+        }
+
+        $detail = new ItemDetail(['requeued' => $requeued]);
         return new Response($serializer->serialize($detail, 'json'), Response::HTTP_ACCEPTED);
     }
 

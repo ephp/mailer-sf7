@@ -5,6 +5,10 @@ framework:
         transports:
             async:
                 dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+                # Quando il worker raggiunge il limite, messenger:consume si
+                # mette in pausa da solo finché non si libera un token. Niente
+                # più invii a manetta che sfondano il tetto SMTP d'Aruba.
+                rate_limiter: messenger_email
                 retry_strategy:
                     max_retries: 3
                     delay: 2000

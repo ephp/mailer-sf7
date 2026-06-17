@@ -53,6 +53,59 @@ class CampaignSenderService
         return $dispatched;
     }
 
+    /**
+     * Reset the campaign's bounced emails back to Pending and re-queue them.
+     * Only contacts that are still subscribed are retried — addresses whose
+     * contact has unsubscribed (manually or via the bounce threshold) are
+     * skipped, respecting the unsubscribe. The existing CampaignEmail rows are
+     * reused (retry counter and error cleared) so the stats stay clean instead
+     * of accumulating duplicate rows.
+     *
+     * @return int number of bounced emails re-queued
+     */
+    public function resendBounced(Campaign $campaign): int
+    {
+        $bounced = $this->campaignEmailRepository->findByCampaignAndStatus(
+            $campaign,
+            CampaignEmailStatus::Bounced
+        );
+
+        $requeued = 0;
+        foreach ($bounced as $campaignEmail) {
+            $contact = $campaignEmail->getContact();
+            // Skip addresses whose contact is no longer subscribed: a manual
+            // unsubscribe must be honoured, and so must the bounce-threshold
+            // auto-unsubscribe.
+            if ($contact === null || !$contact->isIscritto()) {
+                continue;
+            }
+
+            $campaignEmail->setStatus(CampaignEmailStatus::Pending);
+            $campaignEmail->resetRetryCount();
+            $campaignEmail->setErrorMessage(null);
+            $campaignEmail->setSentAt(null);
+            ++$requeued;
+        }
+
+        if ($requeued === 0) {
+            return 0;
+        }
+
+        $this->em->flush();
+
+        // dispatchAll re-queues every Pending email of the campaign, which is
+        // exactly the set we just reset (a fully-sent campaign has no other
+        // Pending rows), spread across batches via the account's DelayStamp.
+        $this->dispatchAll($campaign);
+
+        $this->logger->info('Re-queued {n} bounced emails for campaign {id}', [
+            'n' => $requeued,
+            'id' => $campaign->getId(),
+        ]);
+
+        return $requeued;
+    }
+
     public function prepareCampaign(Campaign $campaign): int
     {
         $mailLists = $campaign->getMailLists()->toArray();

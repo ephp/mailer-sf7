@@ -102,4 +102,10 @@ abstract class BaseCampaignEmail
         ++$this->retryCount;
         return $this;
     }
+
+    public function resetRetryCount(): static
+    {
+        $this->retryCount = 0;
+        return $this;
+    }
 }
