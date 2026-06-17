@@ -248,7 +248,7 @@ class CampaignController extends AbstractController
         $rendered = $renderer->render($campaign);
         $fromAddress = $account->getMailFrom() ?? '';
         $fromName = $account->getMailFromName() ?? '';
-        $subject = '[TEST] ' . ($campaign->getEmailSubject() ?? '');
+        $subject = $campaign->getEmailSubject() ?? '';
 
         $sent = 0;
         $failed = 0;
@@ -604,7 +604,7 @@ class CampaignController extends AbstractController
             $email = (new Email())
                 ->from(new Address($fromAddress, $fromName))
                 ->to($recipientEmail)
-                ->subject('[TEST] ' . $campaign->getEmailSubject())
+                ->subject($campaign->getEmailSubject())
                 ->html($campaign->getBody() ?? '');
 
             $mailer->send($email);
